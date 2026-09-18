@@ -18,9 +18,8 @@ class UBreakable : public UInterface
 class FIH2_API IBreakable
 {
 	GENERATED_BODY()
-	
+
 public:
-	
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Destruction")
 	void TriggerBreak(AActor* BreakInstigator, FVector HitLocation, float DamageAmount);
 };

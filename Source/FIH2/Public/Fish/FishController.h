@@ -17,19 +17,18 @@ class FIH2_API AFishController : public AAIController
 public:
 	// Sets default values for this actor's properties
 	AFishController();
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI")
 	UBehaviorTree* AIBehaviorTree;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
 	UBlackboardComponent* BlackboardComp;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Perception")
 	UAIPerceptionComponent* FishPerceptionComp;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Perception")
 	UAISenseConfig_Sight* SightConfig;
-
 
 protected:
 	// Called when the game starts or when spawned

@@ -13,6 +13,7 @@ UCLASS()
 class FIH2_API UBTT_FindRandomLocation : public UBTTaskNode
 {
 	GENERATED_BODY()
+
 public:
 	UBTT_FindRandomLocation();
 
@@ -21,14 +22,14 @@ public:
 protected:
 	UPROPERTY(EditAnywhere, Category = "Blackboard")
 	FBlackboardKeySelector TargetLocationKey;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Blackboard")
 	FBlackboardKeySelector WaterTankBoxCollisionActor;
 
 
 	UPROPERTY(EditAnywhere, Category = "Search")
 	float SearchRadius = 1500.0f;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Search")
-	float MaxZOffset = 500.0f; 
+	float MaxZOffset = 500.0f;
 };

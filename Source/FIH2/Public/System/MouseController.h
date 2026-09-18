@@ -17,33 +17,31 @@ UCLASS()
 class FIH2_API AMouseController : public APlayerController
 {
 	GENERATED_BODY()
-	
-	public:
-	
+
+public:
 	AMouseController();
-	
+
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void Tick(float DeltaTime) override;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	UPhysicsHandleComponent* PhysicsHandle;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TSoftObjectPtr<UInputMappingContext> InputMapping;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* ClickAction;
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	float TraceRange = 2500.f;
-	
-	
+
+
 	bool bIsDragging;
 	AActor* GrabbedActor;
-	
-	
+
+
 	void OnMouseClick();
 	void OnMouseRelease();
-	
 };

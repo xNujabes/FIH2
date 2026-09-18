@@ -14,7 +14,7 @@ AFish::AFish()
 	PrimaryActorTick.bCanEverTick = true;
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
-	
+
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("Eat Sphere Collision"));
 	CollisionSphere->SetupAttachment(RootComponent);
 	Mesh->SetSimulatePhysics(true);
@@ -29,7 +29,7 @@ void AFish::BeginPlay()
 void AFish::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
-	
+
 	OnHungerChanged.Broadcast();
 }
 

@@ -49,7 +49,7 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Avoidance")
 	bool bDrawDebug = false;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Node")
 	float Timeout = 0.0f;
 };

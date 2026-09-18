@@ -13,7 +13,8 @@ class FIH2_API UFishSteeringMovement : public UFloatingPawnMovement
 	GENERATED_BODY()
 
 public:
-	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
+	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType,
+	                           FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
 	UPROPERTY(EditAnywhere, Category = "Steering")

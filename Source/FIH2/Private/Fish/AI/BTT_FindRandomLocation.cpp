@@ -15,32 +15,32 @@ EBTNodeResult::Type UBTT_FindRandomLocation::ExecuteTask(UBehaviorTreeComponent&
 {
 	AAIController* AIController = OwnerComp.GetAIOwner();
 	UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
-    
-	if (!AIController || !BlackboardComp) 
+
+	if (!AIController || !BlackboardComp)
 	{
 		return EBTNodeResult::Failed;
 	}
 
 	APawn* ControlledPawn = AIController->GetPawn();
-	if (!ControlledPawn) 
+	if (!ControlledPawn)
 	{
 		return EBTNodeResult::Failed;
 	}
 	FVector Origin = ControlledPawn->GetActorLocation();
 	FVector RandomDirection = FMath::VRand();
 	RandomDirection.Z = FMath::Clamp(RandomDirection.Z, -0.5f, 0.5f);
-	RandomDirection.Normalize(); 
+	RandomDirection.Normalize();
 	float RandomDistance = FMath::FRandRange(200.0f, SearchRadius);
 	FVector RandomPoint = Origin + (RandomDirection * RandomDistance);
 	RandomPoint.Z = FMath::Clamp(RandomPoint.Z, Origin.Z - MaxZOffset, Origin.Z + MaxZOffset);
-	
+
 	UObject* BoundsObject = BlackboardComp->GetValueAsObject(WaterTankBoxCollisionActor.SelectedKeyName);
 	if (UBoxComponent* WaterBox = Cast<UBoxComponent>(BoundsObject))
 	{
 		FBox Bounds = WaterBox->Bounds.GetBox();
 		RandomPoint = Bounds.GetClosestPointTo(RandomPoint);
 	}
-	
+
 	BlackboardComp->SetValueAsVector(TargetLocationKey.SelectedKeyName, RandomPoint);
 	return EBTNodeResult::Succeeded;
 }

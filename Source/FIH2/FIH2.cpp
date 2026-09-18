@@ -3,4 +3,4 @@
 #include "FIH2.h"
 #include "Modules/ModuleManager.h"
 
-IMPLEMENT_PRIMARY_GAME_MODULE( FDefaultGameModuleImpl, FIH2, "FIH2" );
+IMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, FIH2, "FIH2");

@@ -7,12 +7,9 @@
 ASand::ASand()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	
+
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
-	
+
 	Mesh->SetSimulatePhysics(true);
 }
-
-
-

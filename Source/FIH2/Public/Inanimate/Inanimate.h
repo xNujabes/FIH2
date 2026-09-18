@@ -20,8 +20,7 @@ class FIH2_API AInanimate : public AActor, public IInteractable
 
 public:
 	AInanimate();
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* Mesh;
-
 };

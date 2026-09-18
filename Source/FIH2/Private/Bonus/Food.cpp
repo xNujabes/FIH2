@@ -12,7 +12,7 @@ AFood::AFood()
 	SetRootComponent(PhysicsProxy);
 	PhysicsProxy->SetSimulatePhysics(true);
 	PhysicsProxy->SetCollisionProfileName(TEXT("PhysicsActor"));
-    
+
 	// TODO: Setup  destruction system here in the future
 }
 
@@ -23,9 +23,9 @@ void AFood::TriggerEat_Implementation(AActor* EatInstigator, FVector HitLocation
 	{
 		// Feed the fish
 		FishInstigator->AddHunger(1);
-       
+
 		// TODO: Call TriggerBreak when done
-       
+
 		// Destroy the food actor immediately
 		Destroy();
 	}

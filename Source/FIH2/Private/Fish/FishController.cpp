@@ -21,7 +21,7 @@ AFishController::AFishController()
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 	SightConfig->SightRadius = 1500.0f;
 	SightConfig->LoseSightRadius = 1800.0f;
-	SightConfig->PeripheralVisionAngleDegrees = 180.0f;     
+	SightConfig->PeripheralVisionAngleDegrees = 180.0f;
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
 	SightConfig->DetectionByAffiliation.bDetectFriendlies = true;
@@ -34,7 +34,7 @@ AFishController::AFishController()
 void AFishController::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	BlackboardComp = FindComponentByClass<UBlackboardComponent>();
 	RunBehaviorTree(AIBehaviorTree);
 	BrainComponent->StopLogic("Do not Start Until In Water");

@@ -17,9 +17,8 @@ class UEatable : public UInterface
 class FIH2_API IEatable
 {
 	GENERATED_BODY()
-	
+
 public:
-	
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Destruction")
 	void TriggerEat(AActor* EatInstigator, FVector HitLocation, float DamageAmount);
 };

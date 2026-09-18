@@ -19,21 +19,17 @@ class UInteractable : public UInterface
 class FIH2_API IInteractable
 {
 	GENERATED_BODY()
-	
+
 public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Interaction")
-    void OnHover();
-	
+	void OnHover();
+
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Interaction")
 	void OnGrab();
-	
+
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Interaction")
 	void OnDropped();
-	
+
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Interaction")
 	void OnThrown(FVector ThrowVelocity);
-	
-	
-
-
 };

@@ -14,6 +14,4 @@ class FIH2_API ASand : public AInanimate
 
 public:
 	ASand();
-	
-
 };

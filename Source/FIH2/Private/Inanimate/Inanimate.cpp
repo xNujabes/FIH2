@@ -5,6 +5,4 @@
 
 AInanimate::AInanimate()
 {
-	
 }
-

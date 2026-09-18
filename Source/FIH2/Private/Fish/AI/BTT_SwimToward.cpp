@@ -7,80 +7,92 @@
 
 UBTT_SwimToward::UBTT_SwimToward()
 {
-    NodeName = "Swim Toward using FishSteeringMovement";
-    bNotifyTick = true; 
+	NodeName = "Swim Toward using FishSteeringMovement";
+	bNotifyTick = true;
 }
 
 uint16 UBTT_SwimToward::GetInstanceMemorySize() const
 {
-    return sizeof(FSwimTaskMemory);
+	return sizeof(FSwimTaskMemory);
 }
 
 EBTNodeResult::Type UBTT_SwimToward::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
-    FSwimTaskMemory* MyMemory = CastInstanceNodeMemory<FSwimTaskMemory>(NodeMemory);
-    
-    AAIController* AIController = OwnerComp.GetAIOwner();
-    UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
-    if (!AIController || !BlackboardComp) return EBTNodeResult::Failed;
+	FSwimTaskMemory* MyMemory = CastInstanceNodeMemory<FSwimTaskMemory>(NodeMemory);
 
-    APawn* ControlledPawn = AIController->GetPawn();
-    if (!ControlledPawn) return EBTNodeResult::Failed;
+	AAIController* AIController = OwnerComp.GetAIOwner();
+	UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
+	if (!AIController || !BlackboardComp)
+	{
+		return EBTNodeResult::Failed;
+	}
 
-    MyMemory->CachedPawn = ControlledPawn;
-    MyMemory->AcceptanceRadiusSq = AcceptanceRadius * AcceptanceRadius; 
+	APawn* ControlledPawn = AIController->GetPawn();
+	if (!ControlledPawn)
+	{
+		return EBTNodeResult::Failed;
+	}
 
-    if (UObject* TargetObject = BlackboardComp->GetValueAsObject(TargetKey.SelectedKeyName))
-    {
-        if (AActor* TargetActor = Cast<AActor>(TargetObject))
-        {
-            MyMemory->TargetActor = TargetActor;
-            MyMemory->bIsTrackingActor = true;
-        }
-        else return EBTNodeResult::Failed;
-    }
-    else
-    {
-        MyMemory->TargetLocation = BlackboardComp->GetValueAsVector(TargetKey.SelectedKeyName);
-        MyMemory->bIsTrackingActor = false;
-    }
-    
-    MyMemory->TimeRunning = 0.0f;
-    
-    return EBTNodeResult::InProgress;
+	MyMemory->CachedPawn = ControlledPawn;
+	MyMemory->AcceptanceRadiusSq = AcceptanceRadius * AcceptanceRadius;
+
+	if (UObject* TargetObject = BlackboardComp->GetValueAsObject(TargetKey.SelectedKeyName))
+	{
+		if (AActor* TargetActor = Cast<AActor>(TargetObject))
+		{
+			MyMemory->TargetActor = TargetActor;
+			MyMemory->bIsTrackingActor = true;
+		}
+		else
+		{
+			return EBTNodeResult::Failed;
+		}
+	}
+	else
+	{
+		MyMemory->TargetLocation = BlackboardComp->GetValueAsVector(TargetKey.SelectedKeyName);
+		MyMemory->bIsTrackingActor = false;
+	}
+
+	MyMemory->TimeRunning = 0.0f;
+
+	return EBTNodeResult::InProgress;
 }
 
 void UBTT_SwimToward::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
 {
-    FSwimTaskMemory* MyMemory = CastInstanceNodeMemory<FSwimTaskMemory>(NodeMemory);
-    APawn* Pawn = MyMemory->CachedPawn.Get();
-    if (!Pawn) return;
-    
-    if (Timeout > 0.0f)
-    {
-        MyMemory->TimeRunning += DeltaSeconds;
-        if (MyMemory->TimeRunning >= Timeout)
-        {
-            FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
-            return;
-        }
-    }
+	FSwimTaskMemory* MyMemory = CastInstanceNodeMemory<FSwimTaskMemory>(NodeMemory);
+	APawn* Pawn = MyMemory->CachedPawn.Get();
+	if (!Pawn)
+	{
+		return;
+	}
 
-    FVector CurrentTargetLoc = MyMemory->bIsTrackingActor && MyMemory->TargetActor.IsValid() 
-        ? MyMemory->TargetActor->GetActorLocation() 
-        : MyMemory->TargetLocation;
+	if (Timeout > 0.0f)
+	{
+		MyMemory->TimeRunning += DeltaSeconds;
+		if (MyMemory->TimeRunning >= Timeout)
+		{
+			FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+			return;
+		}
+	}
 
-    FVector ToTarget = CurrentTargetLoc - Pawn->GetActorLocation();
-    float DistSq = ToTarget.SizeSquared();
+	FVector CurrentTargetLoc = MyMemory->bIsTrackingActor && MyMemory->TargetActor.IsValid()
+		                           ? MyMemory->TargetActor->GetActorLocation()
+		                           : MyMemory->TargetLocation;
 
-    if (DistSq <= MyMemory->AcceptanceRadiusSq)
-    {
-        FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
-        return;
-    }
-    
-    if (DistSq > UE_SMALL_NUMBER)
-    {
-        Pawn->AddMovementInput(ToTarget * FMath::InvSqrt(DistSq), 1.0f);
-    }
+	FVector ToTarget = CurrentTargetLoc - Pawn->GetActorLocation();
+	float DistSq = ToTarget.SizeSquared();
+
+	if (DistSq <= MyMemory->AcceptanceRadiusSq)
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+		return;
+	}
+
+	if (DistSq > UE_SMALL_NUMBER)
+	{
+		Pawn->AddMovementInput(ToTarget * FMath::InvSqrt(DistSq), 1.0f);
+	}
 }
