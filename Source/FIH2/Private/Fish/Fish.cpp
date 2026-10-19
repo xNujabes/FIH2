@@ -33,11 +33,7 @@ void AFish::PossessedBy(AController* NewController)
 	OnHungerChanged.Broadcast();
 }
 
-// Called every frame
-void AFish::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-}
+
 
 int AFish::GetHunger() const
 {

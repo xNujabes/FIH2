@@ -24,6 +24,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* Mesh;
+	
 
 protected:
 	// Called when the game starts or when spawned
@@ -37,12 +38,16 @@ protected:
 	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Status")
 	int Hunger = 1;
 
-	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Status")
+	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "")
 	bool bIsStimulated = false;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Fish|Status")
+	float dizzyTreshold = 720;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Fish|Status")
+	float currentDizziness;
 
 public:
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
 
 	UFUNCTION(BlueprintPure, Category = "Fish|Status")
 	int GetHunger() const;
