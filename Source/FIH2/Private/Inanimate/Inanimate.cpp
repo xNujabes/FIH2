@@ -5,4 +5,6 @@
 
 AInanimate::AInanimate()
 {
+	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	RootComponent = Mesh;
 }

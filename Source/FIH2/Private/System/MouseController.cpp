@@ -35,7 +35,7 @@ void AMouseController::BeginPlay()
 		{
 			if (InputMapping)
 			{
-				InputSystem->AddMappingContext(InputMapping.LoadSynchronous(), 1);
+				InputSystem->AddMappingContext(InputMapping, 1);
 			}
 		}
 	}

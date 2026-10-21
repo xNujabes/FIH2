@@ -26,7 +26,7 @@ public:
 	virtual void SetupInputComponent() override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	TSoftObjectPtr<UInputMappingContext> InputMapping;
+	UInputMappingContext* InputMapping;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* ClickAction;
