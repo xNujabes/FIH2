@@ -75,12 +75,19 @@ void AMouseController::OnMouseClick()
 			{
 				GrabbedActor = HitActor;
 				ClickHitResult = HitResult; 
-				
+
+				GrabAlpha = FMath::Clamp(HitResult.Distance / TraceRange, MinGrabAlpha, 1.f);
 				OnActorClicked.Broadcast(GrabbedActor);
 				break;
 			}
 		}
 	}
+}
+
+void AMouseController::AdjustGrabDistance(float AxisValue)
+{
+	if (!bIsDragging) return;
+	GrabAlpha = FMath::Clamp(GrabAlpha + -AxisValue * GrabScrollSpeed, MinGrabAlpha, 1.f);
 }
 
 void AMouseController::OnMouseRelease()
@@ -121,10 +128,38 @@ void AMouseController::OnMouseMoved()
 		if (OutHits.Num() > 0)
 		{
 			PhysicsHandle->SetTargetLocation(OutHits[0].ImpactPoint);
+			
 		}
 		else
 		{
-			PhysicsHandle->SetTargetLocation(WorldLocation + (WorldDirection * (TraceRange - 4500.f)));
+			PhysicsHandle->SetTargetLocation(WorldLocation + (WorldDirection * TraceRange));
 		}
 	}
+}
+
+void AMouseController::UpdateDragTarget()
+{
+	if (!bIsDragging || !PhysicsHandle->GetGrabbedComponent()) return;
+
+	FVector WorldLocation, WorldDirection;
+	if (!DeprojectMousePositionToWorld(WorldLocation, WorldDirection)) return;
+
+	const FVector TraceEnd = WorldLocation + WorldDirection * TraceRange;
+	FVector Target = FMath::Lerp(WorldLocation, TraceEnd, GrabAlpha);
+	
+	FHitResult Hit;
+	FCollisionQueryParams Params(FName(TEXT("MouseDragTrace")), true);
+	Params.AddIgnoredActor(GrabbedActor);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, WorldLocation, Target, ECC_Visibility, Params))
+	{
+		Target = Hit.ImpactPoint;
+	}
+
+	PhysicsHandle->SetTargetLocation(Target);
+}
+
+void AMouseController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	UpdateDragTarget();
 }

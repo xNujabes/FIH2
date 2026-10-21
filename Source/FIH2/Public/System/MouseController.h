@@ -37,21 +37,31 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	UPhysicsHandleComponent* PhysicsHandle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	float TraceRange = 2500.f;
 	
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Interaction")
 	FOnActorClicked OnActorClicked;
+	
+	UPROPERTY(EditAnywhere, Category="Interaction") 
+	float GrabScrollSpeed = 0.05f;
+	
+	UPROPERTY(EditAnywhere, Category="Interaction")
+	float MinGrabAlpha = 0.02f;
 
-
+	float GrabAlpha = 0.5f;
 	bool bIsDragging;
 	bool bClickHeld;
 	AActor* GrabbedActor;
 	
 	FHitResult ClickHitResult;
 
+	UFUNCTION(BlueprintCallable) void AdjustGrabDistance(float AxisValue);
+	UFUNCTION(BlueprintPure) bool GetIsDragging() const { return bIsDragging; }
 
+	void UpdateDragTarget();
 	void OnMouseClick();
 	void OnMouseRelease();
 	void OnMouseMoved();
+	virtual void PlayerTick(float DeltaTime) override;
 };
