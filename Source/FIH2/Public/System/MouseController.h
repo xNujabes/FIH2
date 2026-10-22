@@ -48,6 +48,13 @@ public:
 	
 	UPROPERTY(EditAnywhere, Category="Interaction")
 	float MinGrabAlpha = 0.02f;
+	
+	UPROPERTY(EditAnywhere, Category="Interaction")
+	float BaseInterpolationSpeed = 50.f;
+	
+	// index 0 : linear, index 1 : angular
+	UPROPERTY(EditAnywhere, Category="Interaction")
+	FVector2D BaseStifness = FVector2D(750, 1500);
 
 	float GrabAlpha = 0.5f;
 	bool bIsDragging;
@@ -58,8 +65,9 @@ public:
 
 	UFUNCTION(BlueprintCallable) void AdjustGrabDistance(float AxisValue);
 	UFUNCTION(BlueprintPure) bool GetIsDragging() const { return bIsDragging; }
-
+	
 	void UpdateDragTarget();
+	
 	void OnMouseClick();
 	void OnMouseRelease();
 	void OnMouseMoved();

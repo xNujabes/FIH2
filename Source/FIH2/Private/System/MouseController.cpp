@@ -75,7 +75,18 @@ void AMouseController::OnMouseClick()
 			{
 				GrabbedActor = HitActor;
 				ClickHitResult = HitResult; 
+				
+				UPrimitiveComponent* RootComp = Cast<UPrimitiveComponent>(GrabbedActor->GetRootComponent());
+				const float Mass = FMath::Max(RootComp->GetMass(), KINDA_SMALL_NUMBER);
+				
+				const float Factor = FMath::Clamp(
+					FMath::Pow(50 / Mass, 1.f),
+					0.1f, 1.f);
 
+				PhysicsHandle->SetLinearStiffness(BaseStifness.X * Factor);
+				PhysicsHandle->SetAngularStiffness(BaseStifness.Y * Factor);
+				PhysicsHandle->SetInterpolationSpeed(BaseInterpolationSpeed * Factor);
+				
 				GrabAlpha = FMath::Clamp(HitResult.Distance / TraceRange, MinGrabAlpha, 1.f);
 				OnActorClicked.Broadcast(GrabbedActor);
 				break;
@@ -93,6 +104,9 @@ void AMouseController::AdjustGrabDistance(float AxisValue)
 void AMouseController::OnMouseRelease()
 {
 	PhysicsHandle->ReleaseComponent();
+	PhysicsHandle->LinearStiffness = BaseStifness.X;
+	PhysicsHandle->AngularStiffness = BaseStifness.Y;
+	PhysicsHandle->InterpolationSpeed = BaseInterpolationSpeed;
 	GrabbedActor = nullptr;
 	bIsDragging = false;
 }
@@ -109,7 +123,6 @@ void AMouseController::OnMouseMoved()
 		if (RootComp)
 		{
 			PhysicsHandle->GrabComponentAtLocation(RootComp, NAME_None, ClickHitResult.ImpactPoint);
-			RootComp->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Overlap);
 		}
 	}
 	

@@ -40,12 +40,7 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "")
 	bool bIsStimulated = false;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Fish|Status")
-	float dizzyTreshold = 720;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Fish|Status")
-	float currentDizziness;
+
 
 public:
 
