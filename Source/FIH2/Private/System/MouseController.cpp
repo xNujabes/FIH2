@@ -6,6 +6,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "InputAction.h"
+#include "Inanimate/Kelp.h"
 #include "PhysicsEngine/PhysicsHandleComponent.h"
 #include "System/Interactable.h"
 
@@ -103,12 +104,21 @@ void AMouseController::AdjustGrabDistance(float AxisValue)
 
 void AMouseController::OnMouseRelease()
 {
+	AActor* Released = GrabbedActor;
+	
 	PhysicsHandle->ReleaseComponent();
 	PhysicsHandle->LinearStiffness = BaseStifness.X;
 	PhysicsHandle->AngularStiffness = BaseStifness.Y;
 	PhysicsHandle->InterpolationSpeed = BaseInterpolationSpeed;
 	GrabbedActor = nullptr;
 	bIsDragging = false;
+	bClickHeld = false;
+	
+	if (AKelp* Kelp = Cast<AKelp>(Released))
+	{
+		Kelp->NotifyReleased();
+	}
+	
 }
 
 void AMouseController::OnMouseMoved()
@@ -150,7 +160,7 @@ void AMouseController::OnMouseMoved()
 	}
 }
 
-void AMouseController::UpdateDragTarget()
+void AMouseController::UpdateDragTarget(float DeltaTime)
 {
 	if (!bIsDragging || !PhysicsHandle->GetGrabbedComponent()) return;
 
@@ -169,10 +179,17 @@ void AMouseController::UpdateDragTarget()
 	}
 
 	PhysicsHandle->SetTargetLocation(Target);
+	
+	if (AKelp* Kelp = Cast<AKelp>(GrabbedActor))
+	{
+		UPrimitiveComponent* Grabbed = PhysicsHandle->GetGrabbedComponent();
+		const FVector GrabWorldPoint = Grabbed->GetComponentTransform().TransformPosition(GrabLocalPoint);
+		Kelp->ReportGrabStrain(FVector::Dist(GrabWorldPoint, Target), DeltaTime);
+	}
 }
 
 void AMouseController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
-	UpdateDragTarget();
+	UpdateDragTarget(DeltaTime);
 }

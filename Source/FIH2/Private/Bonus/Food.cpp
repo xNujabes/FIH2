@@ -429,4 +429,27 @@ void AFood::OnThrown_Implementation(FVector ThrowVelocity)
 		PhysicsProxy->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		PhysicsProxy->SetPhysicsLinearVelocity(ThrowVelocity);
 	}
+	
+	
+}
+
+FText AFood::GetName_Implementation()
+{
+	return FText::FromString("Kelp Fruit");
+}
+
+FText AFood::GetDescription_Implementation()
+{
+	FString StateStr;
+	switch(CurrentGrowthState) 
+	{
+	case EFoodGrowthState::Growing: StateStr = TEXT("Growing"); break;
+	case EFoodGrowthState::FullyGrown: StateStr = TEXT("Fresh"); break;
+	case EFoodGrowthState::Detached: StateStr = TEXT("Dropped"); break;
+	case EFoodGrowthState::Decaying: StateStr = TEXT("Decaying"); break;
+	default: StateStr = TEXT("Unknown"); break;
+	}
+
+	FString Desc = FString::Printf(TEXT("State: %s\nNutrition: +%.1f Hunger"), *StateStr, HungerRestoreAmount);
+	return FText::FromString(Desc);
 }

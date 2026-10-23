@@ -59,4 +59,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Fish|Status")
 	void SetIsStimulated(bool bNewStimulated);
+	
+	virtual FText GetName_Implementation() override;
+	virtual FText GetDescription_Implementation() override;
 };

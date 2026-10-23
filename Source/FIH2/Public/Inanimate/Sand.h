@@ -14,4 +14,7 @@ class FIH2_API ASand : public AInanimate
 
 public:
 	ASand();
+	virtual FText GetName_Implementation() override;
+	virtual FText GetDescription_Implementation() override;
+	
 };

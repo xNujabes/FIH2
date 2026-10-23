@@ -13,7 +13,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnKelpMaturedDelegate, AKelp*, Kelp
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnKelpGrowthProgressChangedDelegate, AKelp*, Kelp, float, NewProgress);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnKelpFruitSpawnedDelegate, AKelp*, Kelp, AFood*, SpawnedFruit);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnKelpFruitDetachedDelegate, AKelp*, Kelp, AFood*, DetachedFruit);
-
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnKelpSupportChangedDelegate, AKelp*, Kelp);
 
 UCLASS()
 class FIH2_API AKelp : public AInanimate
@@ -59,6 +59,26 @@ public:
 	FVector DefaultFruitSpawnOffset = FVector(0.0f, 0.0f, 150.0f);
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Kelp|Spawning")
 	TArray<AFood*> ActiveFruits;
+	
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kelp|Support")
+	UPhysicsConstraintComponent* AttachConstraint;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Kelp|Support")
+	FVector BaseLocalOffset = FVector::ZeroVector;
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
+	TEnumAsByte<ECollisionChannel> AttachTraceChannel = ECC_Visibility;
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
+	float AttachTraceUp = 10.f;
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
+	float AttachTraceDown = 30.f;
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
+	float DetachStrainThreshold = 40.f;
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
+	float DetachHoldTime = 0.4f;
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
+	float StrainRecoveryMultiplier = 2.f;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kelp|Support")
+	bool bIsAttached = false;
 
 
 	UPROPERTY(BlueprintAssignable, Category = "Kelp|Events")
@@ -69,7 +89,15 @@ public:
 	FOnKelpFruitSpawnedDelegate OnFruitSpawned;
 	UPROPERTY(BlueprintAssignable, Category = "Kelp|Events")
 	FOnKelpFruitDetachedDelegate OnFruitDetached;
-
+	UPROPERTY(BlueprintAssignable, Category = "Kelp|Events")
+	FOnKelpSupportChangedDelegate OnAttachedToSupport;
+	UPROPERTY(BlueprintAssignable, Category = "Kelp|Events")
+	FOnKelpSupportChangedDelegate OnDetachedFromSupport;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Kelp|Upright", meta = (ClampMin = "0.0"))
+	float UprightStrength = 20.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Kelp|Upright", meta = (ClampMin = "0.0"))
+	float UprightDamping = 9.f;
 
 	UFUNCTION(BlueprintCallable, Category = "Kelp|Growth")
 	void StartGrowth();
@@ -85,10 +113,27 @@ public:
 	TSubclassOf<AFood> GetFruitClassToSpawn() const;
 	UFUNCTION(BlueprintCallable, Category = "Kelp|Spawning")
 	bool TrySpawnFruit();
+	
+	
+	UFUNCTION(BlueprintCallable, Category = "Kelp|Support")
+	bool TryAttach();
+	UFUNCTION(BlueprintCallable, Category = "Kelp|Support")
+	void Detach();
+	UFUNCTION(BlueprintPure, Category = "Kelp|Support")
+	bool IsAttached() const { return bIsAttached; }
+
+	/** Called by the controller every frame while the kelp is grabbed. */
+	void ReportGrabStrain(float Strain, float DeltaTime);
+	/** Called by the controller when the player lets go. */
+	void NotifyReleased();
+	
+	virtual FText GetName_Implementation() override;
+	virtual FText GetDescription_Implementation() override;
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void Tick(float DeltaTime) override;
 	
 	void UpdateGrowth();
 	void OnMatured();
@@ -105,5 +150,8 @@ private:
 	FTimerHandle FruitSpawnTimerHandle;
 	float CurrentGrowthTime = 0.0f;
 
+	float StrainTimer = 0.f;
+	TWeakObjectPtr<AActor> AttachedSupport;
+	
 	// TODO: Kelp produces oxygen (integrate with ecosystem / oxygen manager)
 };

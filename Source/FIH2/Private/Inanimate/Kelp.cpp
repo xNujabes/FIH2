@@ -5,12 +5,28 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "PhysicsEngine/PhysicsConstraintComponent.h"
+#include "System/SupportSurface.h"
+#include "DrawDebugHelpers.h"
+#include "LandscapeProxy.h"
 
 AKelp::AKelp()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	Mesh->SetSimulatePhysics(false);
 	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+	
+	AttachConstraint = CreateDefaultSubobject<UPhysicsConstraintComponent>(TEXT("AttachConstraint"));
+	AttachConstraint->SetupAttachment(Mesh);
+	AttachConstraint->SetDisableCollision(true);
+	AttachConstraint->SetLinearXLimit(LCM_Locked, 0.f);
+	AttachConstraint->SetLinearYLimit(LCM_Locked, 0.f);
+	AttachConstraint->SetLinearZLimit(LCM_Locked, 0.f);
+	AttachConstraint->SetAngularSwing1Limit(ACM_Locked, 0.f);
+	AttachConstraint->SetAngularSwing2Limit(ACM_Locked, 0.f);
+	AttachConstraint->SetAngularTwistLimit(ACM_Locked, 0.f);
+	
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
 void AKelp::BeginPlay()
@@ -18,7 +34,10 @@ void AKelp::BeginPlay()
 	Super::BeginPlay();
 
 	// TODO: Kelp produces oxygen (integrate with ecosystem / oxygen manager)
-
+	AttachConstraint->BreakConstraint();
+	TryAttach();
+	SetActorTickEnabled(!bIsAttached);
+	
 	if (bStartMature)
 	{
 		GrowthProgress = 1.0f;
@@ -37,6 +56,161 @@ void AKelp::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(FruitSpawnTimerHandle);
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void AKelp::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bIsAttached || !Mesh || !Mesh->IsSimulatingPhysics())
+	{
+		return;
+	}
+
+	const FVector Up = Mesh->GetUpVector();
+	
+	FVector Axis = FVector::CrossProduct(Up, FVector::UpVector);
+	if (Axis.IsNearlyZero() && FVector::DotProduct(Up, FVector::UpVector) < 0.f)
+	{
+		Axis = Mesh->GetRightVector();
+	}
+
+	const FVector AngVel = Mesh->GetPhysicsAngularVelocityInRadians();
+	const FVector Torque = Axis * UprightStrength - AngVel * UprightDamping;
+
+	Mesh->AddTorqueInRadians(Torque, NAME_None, true);
+}
+
+bool AKelp::TryAttach()
+{
+	if (bIsAttached) return true;
+	const FTransform MeshXf = Mesh->GetComponentTransform();
+	const FVector Base = MeshXf.TransformPosition(BaseLocalOffset); // includes scale and rotation
+
+	const float SizeScale = FMath::Abs(MeshXf.GetScale3D().Z);
+	const FVector Start = Base + FVector::UpVector * AttachTraceUp * SizeScale;
+	const FVector End = Base - FVector::UpVector * AttachTraceDown * SizeScale;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(KelpAttach), false, this);
+	FHitResult Hit;
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, AttachTraceChannel, Params);
+
+	DrawDebugLine(GetWorld(), Start, End, bHit ? FColor::Green : FColor::Red, false, 5.f, 0, 1.f);
+
+	if (!bHit)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attach FAILED: ray hit nothing (base %s, down %.0f cm)"),
+			*GetNameSafe(this), *Base.ToString(), AttachTraceDown);
+		return false;
+	}
+
+	AActor* SupportActor = Hit.GetActor();
+	UPrimitiveComponent* SupportComp = Hit.GetComponent();
+	UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Ray hit actor=%s comp=%s"),
+		*GetNameSafe(this), *GetNameSafe(SupportActor), *GetNameSafe(SupportComp));
+
+	if (!SupportActor || !SupportComp)
+	{
+		return false;
+	}
+	bool bIsValidSupport = false;
+	
+	if (SupportActor->Implements<USupportSurface>())
+	{
+		bIsValidSupport = ISupportSurface::Execute_CanSupportAttachment(SupportActor, this, Hit);
+	}
+	else if (SupportActor->IsA<ALandscapeProxy>())
+	{
+		bIsValidSupport = true;
+	}
+
+	if (!bIsValidSupport)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attach FAILED: %s does not implement SupportSurface and is not a Landscape"),
+		   *GetNameSafe(this), *GetNameSafe(SupportActor));
+		return false;
+	}
+	if (!Mesh->IsSimulatingPhysics())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attach FAILED: kelp mesh is not simulating"), *GetNameSafe(this));
+		return false;
+	}
+
+	// Snap: upright, base on the impact point
+	const FRotator NewRot(0.f, GetActorRotation().Yaw, 0.f);
+	const FTransform Rotated(NewRot, FVector::ZeroVector, GetActorScale3D());
+	const FVector NewLoc = Hit.ImpactPoint - Rotated.TransformPosition(BaseLocalOffset);
+
+	Mesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	Mesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	SetActorLocationAndRotation(NewLoc, NewRot, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Rigid joint at the base
+	AttachConstraint->SetWorldLocation(Hit.ImpactPoint);
+	AttachConstraint->SetConstrainedComponents(SupportComp, NAME_None, Mesh, NAME_None);
+
+	if (!AttachConstraint->ConstraintInstance.IsValidConstraintInstance())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Kelp %s] Attach FAILED: constraint invalid. %s probably has no physics body (collision must be 'Query and Physics')"),
+			*GetNameSafe(this),*GetNameSafe(SupportComp));
+		return false;
+	}
+
+	SetActorTickEnabled(false);
+	bIsAttached = true;
+	AttachedSupport = SupportActor;
+	StrainTimer = 0.f;
+	UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attached to %s"), *GetNameSafe(this), *GetNameSafe(SupportActor));
+	OnAttachedToSupport.Broadcast(this);
+	return true;
+}
+
+void AKelp::Detach()
+{
+	if (!bIsAttached)
+	{
+		return;
+	}
+
+	AttachConstraint->BreakConstraint();
+	bIsAttached = false;
+	AttachedSupport = nullptr;
+	StrainTimer = 0.f;
+	Mesh->WakeAllRigidBodies();
+	SetActorTickEnabled(true);
+	OnDetachedFromSupport.Broadcast(this);
+}
+
+void AKelp::ReportGrabStrain(float Strain, float DeltaTime)
+{
+	if (!bIsAttached)
+	{
+		return;
+	}
+
+	if (Strain > DetachStrainThreshold)
+	{
+		StrainTimer += DeltaTime;
+	}
+	else
+	{
+		StrainTimer = FMath::Max(0.f, StrainTimer - DeltaTime * StrainRecoveryMultiplier);
+	}
+
+	if (StrainTimer >= DetachHoldTime)
+	{
+		Detach();
+	}
+}
+
+void AKelp::NotifyReleased()
+{
+	StrainTimer = 0.f;
+	if (!bIsAttached)
+	{
+		TryAttach();
+	}
 }
 
 void AKelp::StartGrowth()
@@ -337,4 +511,20 @@ void AKelp::HandleFruitDestroyed(AActor* DestroyedActor)
 	{
 		ActiveFruits.Remove(DestroyedFruit);
 	}
+}
+
+FText AKelp::GetName_Implementation()
+{
+	return FText::FromString("Kelp");
+}
+
+FText AKelp::GetDescription_Implementation()
+{
+	FString MatureStr = bIsMature ? TEXT("Fully Grown") : TEXT("Growing");
+	int32 Percent = FMath::RoundToInt(GrowthProgress * 100.0f);
+    
+	FString Desc = FString::Printf(TEXT("Status: %s (%d%%)\nFruits: %d / %d"), 
+		*MatureStr, Percent, GetActiveFruitCount(), MaxFruitCount);
+        
+	return FText::FromString(Desc);
 }

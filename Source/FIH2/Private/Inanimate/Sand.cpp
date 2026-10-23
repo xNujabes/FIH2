@@ -9,3 +9,13 @@ ASand::ASand()
 	PrimaryActorTick.bCanEverTick = false;
 	Mesh->SetSimulatePhysics(true);
 }
+
+FText ASand::GetName_Implementation()
+{
+	return FText::FromString("Sand");
+}
+
+FText ASand::GetDescription_Implementation()
+{
+	return FText::FromString("A pile of loose sand.");
+}

@@ -62,12 +62,13 @@ public:
 	AActor* GrabbedActor;
 	
 	FHitResult ClickHitResult;
-
+	
+	FVector GrabLocalPoint = FVector::ZeroVector;
+	
 	UFUNCTION(BlueprintCallable) void AdjustGrabDistance(float AxisValue);
 	UFUNCTION(BlueprintPure) bool GetIsDragging() const { return bIsDragging; }
 	
-	void UpdateDragTarget();
-	
+	void UpdateDragTarget(float DeltaTime);
 	void OnMouseClick();
 	void OnMouseRelease();
 	void OnMouseMoved();

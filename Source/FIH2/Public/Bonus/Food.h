@@ -118,6 +118,8 @@ public:
 	virtual void OnGrab_Implementation() override;
 	virtual void OnDropped_Implementation() override;
 	virtual void OnThrown_Implementation(FVector ThrowVelocity) override;
+	virtual FText GetName_Implementation() override;
+	virtual FText GetDescription_Implementation() override;
 
 protected:
 	virtual void BeginPlay() override;

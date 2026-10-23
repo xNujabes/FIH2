@@ -62,3 +62,16 @@ void AFish::SetIsStimulated(bool bNewStimulated)
 {
 	bIsStimulated = bNewStimulated;
 }
+
+FText AFish::GetName_Implementation()
+{
+	return FText::FromString("Fish");
+}
+
+FText AFish::GetDescription_Implementation()
+{
+	FString StimulatedStr = bIsStimulated ? TEXT("Yes") : TEXT("No");
+	FString Desc = FString::Printf(TEXT("Hunger Level: %d\nStimulated: %s"), Hunger, *StimulatedStr);
+    
+	return FText::FromString(Desc);
+}

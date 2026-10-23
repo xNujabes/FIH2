@@ -10,3 +10,12 @@ AStone::AStone()
 	Mesh->SetSimulatePhysics(true);
 }
 
+FText AStone::GetName_Implementation()
+{
+	return FText::FromString("Stone");
+}
+
+FText AStone::GetDescription_Implementation()
+{
+	return FText::FromString("A heavy, solid stone.");
+}
