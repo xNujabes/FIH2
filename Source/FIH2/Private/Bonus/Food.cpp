@@ -7,6 +7,8 @@
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Inanimate/Kelp.h"
 #include "TimerManager.h"
+#include "Perception/AIPerceptionStimuliSourceComponent.h"
+#include "Perception/AISense_Sight.h"
 
 AFood::AFood()
 {
@@ -24,6 +26,9 @@ AFood::AFood()
 	GeometryCollection->SetSimulatePhysics(false);
 	GeometryCollection->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GeometryCollection->SetVisibility(false);
+	
+	StimuliSource = CreateDefaultSubobject<UAIPerceptionStimuliSourceComponent>(TEXT("AIPerceptionStimuliSource"));
+	StimuliSource->bAutoRegister = false;
 }
 
 void AFood::BeginPlay()
@@ -168,6 +173,10 @@ void AFood::StartGrowth()
 
 	if (GrowthDuration <= 0.0f)
 	{
+		if (StimuliSource)
+		{
+			StimuliSource->RegisterForSense(UAISense_Sight::StaticClass());
+		}
 		SetActorScale3D(MatureGrowthScale);
 		SetGrowthState(EFoodGrowthState::FullyGrown);
 
@@ -214,6 +223,11 @@ void AFood::UpdateGrowth()
 			{
 				PhysicsProxy->IgnoreActorWhenMoving(AttachParentKelp, true);
 			}
+		}
+		
+		if (StimuliSource)
+		{
+			StimuliSource->RegisterForSense(UAISense_Sight::StaticClass());
 		}
 
 		OnFullyGrown.Broadcast(this);

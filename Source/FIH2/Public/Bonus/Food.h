@@ -28,6 +28,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFoodFullyGrownDelegate, AFood*, F
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFoodDetachedDelegate, AFood*, Food);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFoodDecayStartedDelegate, AFood*, Food);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFoodGrowthStateChangedDelegate, AFood*, Food, EFoodGrowthState, NewState);
+class UAIPerceptionStimuliSourceComponent;
 
 UCLASS()
 class FIH2_API AFood : public AInanimate, public IBreakable, public IEatable
@@ -41,6 +42,8 @@ public:
 	UBoxComponent* PhysicsProxy;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Destruction")
 	UGeometryCollectionComponent* GeometryCollection;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
+	UAIPerceptionStimuliSourceComponent* StimuliSource;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Food|State")
 	EFoodGrowthState CurrentGrowthState = EFoodGrowthState::Growing;
