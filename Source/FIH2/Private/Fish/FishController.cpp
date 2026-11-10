@@ -37,5 +37,4 @@ void AFishController::BeginPlay()
 
 	BlackboardComp = FindComponentByClass<UBlackboardComponent>();
 	RunBehaviorTree(AIBehaviorTree);
-	BrainComponent->StopLogic("Do not Start Until In Water");
 }
