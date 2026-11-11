@@ -362,6 +362,12 @@ void AFood::TriggerEat_Implementation(AActor* EatInstigator, FVector HitLocation
 	{
 		bIsEaten = true;
 
+		// Stop being seen: no fish should pick this (now invisible) food as a target anymore.
+		if (StimuliSource)
+		{
+			StimuliSource->UnregisterFromPerceptionSystem();
+		}
+
 		// Clear all active timers
 		GetWorldTimerManager().ClearTimer(GrowthTimerHandle);
 		GetWorldTimerManager().ClearTimer(FullyGrownTimerHandle);
@@ -383,6 +389,11 @@ void AFood::TriggerEat_Implementation(AActor* EatInstigator, FVector HitLocation
 		
 		SetLifeSpan(EatenLifeSpan); 
 	}
+}
+
+bool AFood::IsEdible() const
+{
+	return !bIsEaten && !IsActorBeingDestroyed();
 }
 
 void AFood::TriggerBreak_Implementation(AActor* BreakInstigator, FVector HitLocation, float DamageAmount)

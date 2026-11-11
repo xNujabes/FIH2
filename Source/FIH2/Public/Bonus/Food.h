@@ -37,6 +37,9 @@ class FIH2_API AFood : public AInanimate, public IBreakable, public IEatable
 
 public:
 	AFood();
+
+	/** IEatable: not edible anymore once eaten (the actor lives a few seconds more for the break effect). */
+	virtual bool IsEdible() const override;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Physics")
 	UBoxComponent* PhysicsProxy;

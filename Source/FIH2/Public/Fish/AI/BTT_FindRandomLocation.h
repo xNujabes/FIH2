@@ -32,4 +32,16 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Search")
 	float MaxZOffset = 500.0f;
+
+	/** Number of random points tried before giving up (the point must be outside every obstacle). */
+	UPROPERTY(EditAnywhere, Category = "Search", meta = (ClampMin = "1"))
+	int32 MaxAttempts = 10;
+
+	/** Free space required around the target point (about the fish's half-width or a bit more). */
+	UPROPERTY(EditAnywhere, Category = "Search", meta = (ClampMin = "1.0"))
+	float ClearanceRadius = 60.0f;
+
+	/** Reject targets that have an obstacle on the straight line from the fish (avoids aiming behind a wall). */
+	UPROPERTY(EditAnywhere, Category = "Search")
+	bool bRequireClearPath = true;
 };

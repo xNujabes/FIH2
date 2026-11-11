@@ -6,6 +6,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "InputAction.h"
+#include "Fish/Fish.h"
 #include "Inanimate/Kelp.h"
 #include "PhysicsEngine/PhysicsHandleComponent.h"
 #include "System/Interactable.h"
@@ -47,10 +48,21 @@ void AMouseController::SetupInputComponent()
 	Super::SetupInputComponent();
 
 	UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(InputComponent);
+	if (!Input)
+	{
+		UE_LOG(LogTemp, Error, TEXT("MouseController: InputComponent n'est pas un EnhancedInputComponent, aucune action liée."));
+		return;
+	}
 
-	Input->BindAction(ClickAction, ETriggerEvent::Started, this, &AMouseController::OnMouseClick);
-	Input->BindAction(ClickAction, ETriggerEvent::Completed, this, &AMouseController::OnMouseRelease);
-	Input->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMouseController::OnMouseMoved);
+	if (ClickAction)
+	{
+		Input->BindAction(ClickAction, ETriggerEvent::Started, this, &AMouseController::OnMouseClick);
+		Input->BindAction(ClickAction, ETriggerEvent::Completed, this, &AMouseController::OnMouseRelease);
+	}
+	if (LookAction)
+	{
+		Input->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMouseController::OnMouseMoved);
+	}
 }
 
 
@@ -74,10 +86,21 @@ void AMouseController::OnMouseClick()
 			AActor* HitActor = HitResult.GetActor();
 			if (HitActor && HitActor->Implements<UInteractable>())
 			{
+				UPrimitiveComponent* RootComp = Cast<UPrimitiveComponent>(HitActor->GetRootComponent());
+				if (!RootComp)
+				{
+					continue; // rien à saisir sur cet acteur
+				}
+
 				GrabbedActor = HitActor;
 				ClickHitResult = HitResult; 
+
+				// Fish are kinematic (moved only by FishSteeringMovement): let physics take over while held.
+				if (AFish* Fish = Cast<AFish>(GrabbedActor))
+				{
+					Fish->SetHeldByPlayer(true);
+				}
 				
-				UPrimitiveComponent* RootComp = Cast<UPrimitiveComponent>(GrabbedActor->GetRootComponent());
 				const float Mass = FMath::Max(RootComp->GetMass(), KINDA_SMALL_NUMBER);
 				
 				const float Factor = FMath::Clamp(
@@ -118,6 +141,11 @@ void AMouseController::OnMouseRelease()
 	{
 		Kelp->NotifyReleased();
 	}
+
+	if (AFish* Fish = Cast<AFish>(Released))
+	{
+		Fish->SetHeldByPlayer(false);
+	}
 	
 }
 
@@ -132,32 +160,12 @@ void AMouseController::OnMouseMoved()
 
 		if (RootComp)
 		{
+			// Point saisi, en espace local du composant (sert à mesurer la tension du kelp).
+			GrabLocalPoint = RootComp->GetComponentTransform().InverseTransformPosition(ClickHitResult.ImpactPoint);
 			PhysicsHandle->GrabComponentAtLocation(RootComp, NAME_None, ClickHitResult.ImpactPoint);
 		}
 	}
-	
-	if (bIsDragging && PhysicsHandle->GetGrabbedComponent())
-	{
-		TArray<FHitResult> OutHits;
-		FCollisionQueryParams TraceParams = FCollisionQueryParams(FName(TEXT("MouseDragTrace")), true);
-		TraceParams.AddIgnoredActor(GrabbedActor);
-
-		FVector WorldLocation, WorldDirection;
-		DeprojectMousePositionToWorld(WorldLocation, WorldDirection);
-		FVector TraceEnd = WorldLocation + (WorldDirection * TraceRange);
-
-		GetWorld()->LineTraceMultiByChannel(OutHits, WorldLocation, TraceEnd, ECC_Visibility, TraceParams);
-
-		if (OutHits.Num() > 0)
-		{
-			PhysicsHandle->SetTargetLocation(OutHits[0].ImpactPoint);
-			
-		}
-		else
-		{
-			PhysicsHandle->SetTargetLocation(WorldLocation + (WorldDirection * TraceRange));
-		}
-	}
+	// La cible du drag est mise à jour à un seul endroit : UpdateDragTarget (appelé à chaque PlayerTick).
 }
 
 void AMouseController::UpdateDragTarget(float DeltaTime)

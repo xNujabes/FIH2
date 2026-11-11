@@ -5,13 +5,23 @@
 #include "CoreMinimal.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/Actor.h"
+#include "System/Eatable.h"
 #include "System/Interactable.h"
 #include "Fish.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnHungerChangedDelegate);
 
+UENUM(BlueprintType)
+enum class EFoodPreferences : uint8
+{
+	Omnivore UMETA(DisplayName = "Omnivore"),
+	Carnivore UMETA(DisplayName = "Carnivore"),
+	Herbivore UMETA(DisplayName = "Herbivore"),
+	Crab UMETA(DisplayName = "Only eats crabs")
+};
+
 UCLASS()
-class FIH2_API AFish : public APawn, public IInteractable
+class FIH2_API AFish : public APawn, public IInteractable, public IEatable
 {
 	GENERATED_BODY()
 
@@ -38,8 +48,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Status")
 	int Hunger = 1;
 
-	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "")
+	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Status")
 	bool bIsStimulated = false;
+
+	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Movement")
+	bool bIsHeldByPlayer = false;
+	
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "Fish|Status")
+	EFoodPreferences FoodPreferences = EFoodPreferences::Herbivore;
 
 
 public:
@@ -56,6 +72,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Fish|Status")
 	bool IsStimulated() const;
+
+	/**
+	 * A fish is kinematic and moves ONLY through its UFishSteeringMovement.
+	 * The player controller calls this while the fish is held with the physics handle: the body then simulates
+	 * physics so it can be dragged (steering stands aside). When released, the fish is kinematic again.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Fish|Movement")
+	void SetHeldByPlayer(bool bHeld);
+
+	UFUNCTION(BlueprintPure, Category = "Fish|Movement")
+	bool IsHeldByPlayer() const { return bIsHeldByPlayer; }
 
 	UFUNCTION(BlueprintCallable, Category = "Fish|Status")
 	void SetIsStimulated(bool bNewStimulated);

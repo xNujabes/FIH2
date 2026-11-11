@@ -17,13 +17,19 @@ AFish::AFish()
 
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("Eat Sphere Collision"));
 	CollisionSphere->SetupAttachment(RootComponent);
-	Mesh->SetSimulatePhysics(true);
+
+	// Kinematic body: the fish is moved only by UFishSteeringMovement (no physics, no gravity).
+	Mesh->SetSimulatePhysics(false);
+	Mesh->SetEnableGravity(false);
 }
 
 // Called when the game starts or when spawned
 void AFish::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Guarantee it whatever a Blueprint default says: steering is the only mover.
+	SetHeldByPlayer(false);
 }
 
 void AFish::PossessedBy(AController* NewController)
@@ -52,6 +58,18 @@ void AFish::AddHunger(float AddedHunger)
 	OnHungerChanged.Broadcast();
 }
 
+
+void AFish::SetHeldByPlayer(bool bHeld)
+{
+	bIsHeldByPlayer = bHeld;
+
+	if (Mesh)
+	{
+		// Physics only while the player drags the fish; otherwise kinematic, driven by UFishSteeringMovement.
+		Mesh->SetSimulatePhysics(bHeld);
+		Mesh->SetEnableGravity(false);
+	}
+}
 
 bool AFish::IsStimulated() const
 {

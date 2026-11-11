@@ -13,10 +13,13 @@ struct FSwimTaskMemory
 {
 	TWeakObjectPtr<APawn> CachedPawn;
 	TWeakObjectPtr<AActor> TargetActor;
-	FVector TargetLocation;
-	float AcceptanceRadiusSq;
-	bool bIsTrackingActor;
-	float TimeRunning;
+	FVector TargetLocation = FVector::ZeroVector;
+	float AcceptanceRadiusSq = 0.0f;
+	bool bIsTrackingActor = false;
+	float TimeRunning = 0.0f;
+	// Stuck detection: position at the start of the current window and time spent in it.
+	FVector WindowStartLocation = FVector::ZeroVector;
+	float WindowTime = 0.0f;
 };
 
 UCLASS()
@@ -52,4 +55,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Node")
 	float Timeout = 0.0f;
+
+	/** Stuck detection: length (s) of the window in which the fish must make progress. 0 = disabled. */
+	UPROPERTY(EditAnywhere, Category = "Stuck", meta = (ClampMin = "0.0"))
+	float StuckCheckTime = 1.5f;
+
+	/** Minimum distance (cm) the fish must cover during one window, otherwise the task fails (a new target is then picked). */
+	UPROPERTY(EditAnywhere, Category = "Stuck", meta = (ClampMin = "0.0"))
+	float StuckMinDistance = 100.0f;
 };

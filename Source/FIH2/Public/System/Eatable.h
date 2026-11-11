@@ -21,4 +21,7 @@ class FIH2_API IEatable
 public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Destruction")
 	void TriggerEat(AActor* EatInstigator, FVector HitLocation, float DamageAmount);
+
+	/** C++ only: false once the item was eaten (or is about to disappear). AI uses it to drop a stale target. */
+	virtual bool IsEdible() const { return true; }
 };
