@@ -64,10 +64,10 @@ public:
 	int GetHunger() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Fish|Status")
-	void SetHunger(float NewHunger);
+	void SetHunger(int32 NewHunger);
 
 	UFUNCTION(BlueprintCallable, Category = "Fish|Status")
-	void AddHunger(float AddedHunger);
+	void AddHunger(int32 AddedHunger);
 
 
 	UFUNCTION(BlueprintPure, Category = "Fish|Status")

@@ -10,8 +10,8 @@
 // Sets default values
 AFish::AFish()
 {
-	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	// Pas de tick d'acteur : le mouvement est géré dans UFishSteeringMovement (son propre tick).
+	PrimaryActorTick.bCanEverTick = false;
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
 
@@ -46,15 +46,15 @@ int AFish::GetHunger() const
 	return Hunger;
 }
 
-void AFish::SetHunger(float NewHunger)
+void AFish::SetHunger(int32 NewHunger)
 {
-	Hunger = NewHunger;
+	Hunger = FMath::Clamp(NewHunger, 0, 3);
 	OnHungerChanged.Broadcast();
 }
 
-void AFish::AddHunger(float AddedHunger)
+void AFish::AddHunger(int32 AddedHunger)
 {
-	Hunger = UKismetMathLibrary::Clamp(Hunger + AddedHunger, 0, 3);
+	Hunger = FMath::Clamp(Hunger + AddedHunger, 0, 3);
 	OnHungerChanged.Broadcast();
 }
 

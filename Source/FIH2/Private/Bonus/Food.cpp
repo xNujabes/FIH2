@@ -9,6 +9,7 @@
 #include "TimerManager.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
+#include "System/FIH2Log.h"
 
 AFood::AFood()
 {
@@ -381,7 +382,7 @@ void AFood::TriggerEat_Implementation(AActor* EatInstigator, FVector HitLocation
 			OnDetached.Broadcast(this);
 		}
 
-		FishInstigator->AddHunger(HungerRestoreAmount);
+		FishInstigator->AddHunger(FMath::RoundToInt(HungerRestoreAmount));
 		Mesh->SetVisibility(false);
 		PhysicsProxy->SetSimulatePhysics(false);
 		PhysicsProxy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -408,7 +409,7 @@ void AFood::TriggerBreak_Implementation(AActor* BreakInstigator, FVector HitLoca
 		AFood* RawThis = this;
 		GetWorldTimerManager().SetTimerForNextTick([RawThis, HitLocation, DamageAmount]()
 		{
-			UE_LOG(LogTemp, Warning, TEXT("TriggerBreak Timer expired"));
+			UE_LOG(LogFood, Verbose, TEXT("TriggerBreak Timer expired"));
 			if (!IsValid(RawThis) || !RawThis->GeometryCollection) return;
 			RawThis->GeometryCollection->AddRadialImpulse(
 				HitLocation, RawThis->BreakImpulseRadius, DamageAmount,
@@ -421,7 +422,7 @@ void AFood::TriggerBreak_Implementation(AActor* BreakInstigator, FVector HitLoca
 				RawThis->BreakPropagationFactor,
 				RawThis->BreakExternalStrain);
 			
-			UE_LOG(LogTemp, Warning, TEXT("Impulses should have been done"));
+			UE_LOG(LogFood, Verbose, TEXT("Impulses should have been done"));
 		});
 	}
 }
