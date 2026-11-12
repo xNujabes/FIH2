@@ -63,12 +63,27 @@ int32 ASandSpawner::SpawnSand()
 
 	const FTransform AreaXf(SpawnArea->GetComponentQuat(), SpawnArea->GetComponentLocation());
 
+	// Les cases occupées par le décor (pierres, parois) sont sautées AVANT le spawn :
+	// on évite ainsi FindTeleportSpot, qui échoue sur un grain dont la racine est un mesh (warning LogPhysics).
 	FActorSpawnParameters Params;
 	Params.Owner = this;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	FCollisionObjectQueryParams BlockingTypes;
+	for (const TEnumAsByte<ECollisionChannel>& Channel : BlockingObjectTypes)
+	{
+		BlockingTypes.AddObjectTypesToQuery(Channel);
+	}
+	FCollisionQueryParams OverlapParams(SCENE_QUERY_STAT(SandSpawnerOverlap), false, this);
+	const FCollisionShape GrainShape = FCollisionShape::MakeSphere(GrainDiameter * 0.5f);
+
+	// Assez de candidats pour compenser les cases bloquées : les couches nécessaires + MaxExtraLayers.
+	const int32 NeededLayers = FMath::DivideAndRoundUp(SandCount, CellsPerLayer);
+	const int32 MaxCandidates = CellsPerLayer * (NeededLayers + MaxExtraLayers);
 
 	int32 Spawned = 0;
-	for (int32 i = 0; i < SandCount; ++i)
+	int32 Skipped = 0;
+	for (int32 i = 0; i < MaxCandidates && Spawned < SandCount; ++i)
 	{
 		const int32 Layer = i / CellsPerLayer;
 		const int32 Cell = CellOrder[i % CellsPerLayer];
@@ -79,18 +94,30 @@ int32 ASandSpawner::SpawnSand()
 			-Extent.X + Spacing * (Col + 0.5f) + Stream.FRandRange(-MaxJitter, MaxJitter),
 			-Extent.Y + Spacing * (Row + 0.5f) + Stream.FRandRange(-MaxJitter, MaxJitter),
 			Layer * Spacing);
+		const FVector WorldLoc = AreaXf.TransformPosition(Local);
+
+		if (BlockingObjectTypes.Num() > 0 &&
+			World->OverlapAnyTestByObjectType(WorldLoc, FQuat::Identity, BlockingTypes, GrainShape, OverlapParams))
+		{
+			++Skipped;
+			continue;
+		}
 
 		const FRotator Rot(0.f, Stream.FRandRange(0.f, 360.f), 0.f);
-		const FTransform SpawnXf(Rot, AreaXf.TransformPosition(Local));
-
-		if (AActor* Grain = World->SpawnActor<AActor>(SandClass, SpawnXf, Params))
+		if (AActor* Grain = World->SpawnActor<AActor>(SandClass, FTransform(Rot, WorldLoc), Params))
 		{
 			SpawnedGrains.Add(Grain);
 			++Spawned;
 		}
 	}
 
-	UE_LOG(LogSand, Verbose, TEXT("[SandSpawner %s] %d grains créés (%d x %d par couche, pas %.0f cm)"),
-		*GetNameSafe(this), Spawned, Cols, Rows, Spacing);
+	if (Spawned < SandCount)
+	{
+		UE_LOG(LogSand, Warning, TEXT("[SandSpawner %s] Seulement %d/%d grains : zone trop encombrée, agrandir SpawnArea ou MaxExtraLayers"),
+			*GetNameSafe(this), Spawned, SandCount);
+	}
+
+	UE_LOG(LogSand, Verbose, TEXT("[SandSpawner %s] %d grains créés, %d cases sautées (%d x %d par couche, pas %.0f cm)"),
+		*GetNameSafe(this), Spawned, Skipped, Cols, Rows, Spacing);
 	return Spawned;
 }

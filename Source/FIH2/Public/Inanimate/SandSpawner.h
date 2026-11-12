@@ -50,6 +50,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sand")
 	int32 RandomSeed = 0;
 
+	/** Types d'objets qui bloquent une case (décor : pierres, parois). Vide = aucun test. */
+	UPROPERTY(EditAnywhere, Category = "Sand")
+	TArray<TEnumAsByte<ECollisionChannel>> BlockingObjectTypes = { ECC_WorldStatic };
+
+	/** Couches supplémentaires autorisées pour remplacer les cases bloquées [0–5]. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sand", meta = (ClampMin = "0", UIMax = "5"))
+	int32 MaxExtraLayers = 1;
+
 	/** Crée les grains (appelé au BeginPlay). Renvoie le nombre de grains créés. */
 	UFUNCTION(BlueprintCallable, Category = "Sand")
 	int32 SpawnSand();
