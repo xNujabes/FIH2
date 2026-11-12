@@ -101,7 +101,10 @@ void AMouseController::OnMouseClick()
 					Fish->SetHeldByPlayer(true);
 				}
 				
-				const float Mass = FMath::Max(RootComp->GetMass(), KINDA_SMALL_NUMBER);
+				// GetMass() exige une simulation physique active (sinon warning, ex. fruit encore accroché au kelp,
+				// qui ne passe en physique qu'au OnGrab). CalculateMass() lit la masse depuis le body setup dans tous les cas.
+				const float RawMass = RootComp->IsSimulatingPhysics() ? RootComp->GetMass() : RootComp->CalculateMass();
+				const float Mass = FMath::Max(RawMass, KINDA_SMALL_NUMBER);
 				
 				const float Factor = FMath::Clamp(
 					FMath::Pow(50 / Mass, 1.f),
