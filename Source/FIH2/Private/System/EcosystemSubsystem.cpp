@@ -5,8 +5,11 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Fish/Fish.h"
+#include "Fish/FishEgg.h"
+#include "GameFramework/PlayerController.h"
 #include "Fish/PredatorFish.h"
 #include "Inanimate/Kelp.h"
+#include "PhysicsEngine/PhysicsHandleComponent.h"
 #include "Stats/Stats.h"
 #include "System/LevelConfig.h"
 
@@ -44,6 +47,7 @@ void UEcosystemSubsystem::Deinitialize()
 	Fish.Empty();
 	Kelps.Empty();
 	Foods.Empty();
+	Eggs.Empty();
 	Super::Deinitialize();
 }
 
@@ -89,11 +93,12 @@ void UEcosystemSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	for (TActorIterator<AFish> It(&InWorld); It; ++It) { TrackActor(*It); }
 	for (TActorIterator<AKelp> It(&InWorld); It; ++It) { TrackActor(*It); }
 	for (TActorIterator<AFood> It(&InWorld); It; ++It) { TrackActor(*It); }
+	for (TActorIterator<AFishEgg> It(&InWorld); It; ++It) { TrackActor(*It); }
 
 	ActorSpawnedHandle = InWorld.AddOnActorSpawnedHandler(
 		FOnActorSpawned::FDelegate::CreateUObject(this, &UEcosystemSubsystem::HandleActorSpawned));
 
-	UE_LOG(LogEcosystem, Log, TEXT("Écosystème prêt : %d poissons, %d kelps, %d fruits suivis."), Fish.Num(), Kelps.Num(), Foods.Num());
+	UE_LOG(LogEcosystem, Log, TEXT("Écosystème prêt : %d poissons, %d kelps, %d fruits, %d œufs suivis."), Fish.Num(), Kelps.Num(), Foods.Num(), Eggs.Num());
 }
 
 void UEcosystemSubsystem::ResetEcosystem()
@@ -108,6 +113,7 @@ void UEcosystemSubsystem::ResetEcosystem()
 	ExtinctionTimer = 0.f;
 	Accumulator = 0.f;
 	CorpsePulses.Reset();
+	EggsLost = 0;
 	bLevelStarted = false;
 }
 
@@ -160,6 +166,16 @@ void UEcosystemSubsystem::TrackActor(AActor* Actor)
 		Foods.AddUnique(TWeakObjectPtr<AFood>(FoodActor));
 		FoodActor->OnEndPlay.AddUniqueDynamic(this, &UEcosystemSubsystem::HandleActorEndPlay);
 	}
+	else if (AFishEgg* EggActor = Cast<AFishEgg>(Actor))
+	{
+		// Œuf placé à la main dans le niveau : incubation par défaut (la ponte appelle InitEgg ensuite, qui l'écrase).
+		if (EggActor->IncubationDuration <= 0.f)
+		{
+			EggActor->InitEgg(EggActor->FishClass, EggActor->AdultScale, Config->EggIncubationTime);
+		}
+		Eggs.AddUnique(TWeakObjectPtr<AFishEgg>(EggActor));
+		EggActor->OnEndPlay.AddUniqueDynamic(this, &UEcosystemSubsystem::HandleActorEndPlay);
+	}
 }
 
 void UEcosystemSubsystem::HandleActorSpawned(AActor* Actor)
@@ -190,6 +206,10 @@ void UEcosystemSubsystem::HandleActorEndPlay(AActor* Actor, EEndPlayReason::Type
 	else if (AFood* FoodActor = Cast<AFood>(Actor))
 	{
 		Foods.RemoveSingleSwap(TWeakObjectPtr<AFood>(FoodActor));
+	}
+	else if (AFishEgg* EggActor = Cast<AFishEgg>(Actor))
+	{
+		Eggs.RemoveSingleSwap(TWeakObjectPtr<AFishEgg>(EggActor));
 	}
 }
 
@@ -268,6 +288,7 @@ void UEcosystemSubsystem::Step(float Dt)
 	}
 	Kelps.RemoveAllSwap([](const TWeakObjectPtr<AKelp>& K) { return !K.IsValid(); });
 	Foods.RemoveAllSwap([](const TWeakObjectPtr<AFood>& F) { return !F.IsValid(); });
+	Eggs.RemoveAllSwap([](const TWeakObjectPtr<AFishEgg>& E) { return !E.IsValid(); });
 
 	// 1. Comptages
 	int32 Adults = 0, Fry = 0, Starving = 0, MatureKelp = 0, DecayingFood = 0;
@@ -323,6 +344,31 @@ void UEcosystemSubsystem::Step(float Dt)
 		if (Victims.Num() > 0) { CountFish(); }
 	}
 
+	// 4 bis. Œufs (D-09, D-10) : incubation en pause tant que le joueur tient l'œuf ; mort si la pollution est en zone rouge.
+	{
+		const AActor* HeldActor = GetHeldActor();
+		const bool bPollutionRed = C.bEggsDieInRedPollution && Pollution >= C.RedThreshold;
+		TArray<AFishEgg*> ToKill;
+		TArray<AFishEgg*> ToHatch;
+		for (const TWeakObjectPtr<AFishEgg>& WeakEgg : Eggs)
+		{
+			AFishEgg* Egg = WeakEgg.Get();
+			if (!Egg || Egg == HeldActor) { continue; }
+			if (bPollutionRed) { ToKill.Add(Egg); continue; }
+			Egg->IncubationRemaining -= Dt;
+			if (Egg->IncubationRemaining <= 0.f) { ToHatch.Add(Egg); }
+		}
+		for (AFishEgg* Egg : ToKill)
+		{
+			Eggs.RemoveSingleSwap(TWeakObjectPtr<AFishEgg>(Egg));
+			Egg->Destroy();
+			++EggsLost;
+		}
+		for (AFishEgg* Egg : ToHatch) { HatchEgg(Egg); }
+		if (ToHatch.Num() > 0) { CountFish(); }
+	}
+	const int32 EggCount = Eggs.Num();
+
 	// 5. Stress par variable, puis jauge globale = moyenne pondérée par zone (D-03)
 	const int32 Total = Adults + Fry;
 	const float StressPollution = Pollution;
@@ -362,10 +408,10 @@ void UEcosystemSubsystem::Step(float Dt)
 		if (Record.ReproTimer <= 0.f)
 		{
 			Record.ReproTimer = NextReproCooldown();
-			if (Total + Parents.Num() < C.MaxFishTotal) { Parents.Add(F); }
+			if (Total + EggCount + Parents.Num() < C.MaxFishTotal) { Parents.Add(F); }
 		}
 	}
-	for (AFish* Parent : Parents) { SpawnFry(Parent); }
+	for (AFish* Parent : Parents) { LayEgg(Parent); }
 
 	// 7. Timers et conditions de fin (seulement tant que la partie est en cours)
 	if (State == EEcosystemState::Playing)
@@ -374,7 +420,7 @@ void UEcosystemSubsystem::Step(float Dt)
 		DefeatTimer = (Gauge >= C.DefeatGaugeThreshold)
 			? DefeatTimer + Dt
 			: FMath::Max(0.f, DefeatTimer - C.DefeatTimerDecay * Dt);
-		ExtinctionTimer = (Adults < 2 && Fry == 0) ? ExtinctionTimer + Dt : 0.f;
+		ExtinctionTimer = (Adults < 2 && Fry == 0 && EggCount == 0) ? ExtinctionTimer + Dt : 0.f; // D-11
 
 		if (DefeatTimer >= C.DefeatDuration)
 		{
@@ -404,6 +450,8 @@ void UEcosystemSubsystem::Step(float Dt)
 	Snapshot.TimeRemaining = FMath::Max(0.f, C.LevelDuration - Elapsed);
 	Snapshot.AdultFish = Adults;
 	Snapshot.FryFish = Fry;
+	Snapshot.Eggs = EggCount;
+	Snapshot.EggsLost = EggsLost;
 	Snapshot.ObjectiveAdultFish = C.ObjectiveAdultFish;
 	Snapshot.Pollution = Pollution;
 	Snapshot.Oxygen = Oxygen;
@@ -433,7 +481,15 @@ void UEcosystemSubsystem::UpdateFryScales()
 	}
 }
 
-void UEcosystemSubsystem::SpawnFry(AFish* Parent)
+const AActor* UEcosystemSubsystem::GetHeldActor() const
+{
+	const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	const UPhysicsHandleComponent* Handle = PC ? PC->FindComponentByClass<UPhysicsHandleComponent>() : nullptr;
+	const UPrimitiveComponent* Grabbed = Handle ? Handle->GetGrabbedComponent() : nullptr;
+	return Grabbed ? Grabbed->GetOwner() : nullptr;
+}
+
+void UEcosystemSubsystem::LayEgg(AFish* Parent)
 {
 	UWorld* World = GetWorld();
 	if (!Parent || !World || !Config)
@@ -443,11 +499,61 @@ void UEcosystemSubsystem::SpawnFry(AFish* Parent)
 
 	const FFishRecord* ParentRecord = Fish.Find(TWeakObjectPtr<AFish>(Parent));
 	const FVector AdultScale = ParentRecord ? ParentRecord->AdultScale : Parent->GetActorScale3D();
+	UClass* EggClass = Config->EggClass ? Config->EggClass.Get() : AFishEgg::StaticClass();
 
-	FVector Direction = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-0.5f, 0.5f)).GetSafeNormal();
-	if (Direction.IsNearlyZero())
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	const FVector Location = Parent->GetActorLocation() - FVector(0.f, 0.f, Config->EggDropOffset);
+
+	AFishEgg* Egg = World->SpawnActor<AFishEgg>(EggClass, Location, FRotator::ZeroRotator, Params);
+	if (!Egg)
 	{
-		Direction = FVector::ForwardVector;
+		return;
+	}
+	Egg->SetActorScale3D(FVector(Config->EggScale));
+	Egg->InitEgg(Parent->GetClass(), AdultScale, Config->EggIncubationTime);
+	TrackActor(Egg); // sans effet si HandleActorSpawned l'a déjà enregistré
+}
+
+void UEcosystemSubsystem::HatchEgg(AFishEgg* Egg)
+{
+	if (!Egg)
+	{
+		return;
+	}
+
+	TSubclassOf<AFish> FishClass = Egg->FishClass;
+	FVector AdultScale = Egg->AdultScale;
+	if (!FishClass)
+	{
+		// Œuf placé à la main sans parent : il prend l'espèce d'un poisson suivi.
+		for (const auto& Pair : Fish)
+		{
+			if (const AFish* F = Pair.Key.Get())
+			{
+				FishClass = F->GetClass();
+				AdultScale = Pair.Value.AdultScale;
+				break;
+			}
+		}
+	}
+
+	const FVector Location = Egg->GetActorLocation() + FVector(0.f, 0.f, Config->FrySpawnDistance);
+	Eggs.RemoveSingleSwap(TWeakObjectPtr<AFishEgg>(Egg));
+	Egg->Destroy();
+
+	if (FishClass)
+	{
+		SpawnFry(FishClass, Location, FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), AdultScale);
+	}
+}
+
+void UEcosystemSubsystem::SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale)
+{
+	UWorld* World = GetWorld();
+	if (!FishClass || !World || !Config)
+	{
+		return;
 	}
 
 	FActorSpawnParameters Params;
@@ -455,7 +561,7 @@ void UEcosystemSubsystem::SpawnFry(AFish* Parent)
 
 	bSpawningFry = true;
 	PendingFryAdultScale = AdultScale;
-	AFish* Newborn = World->SpawnActor<AFish>(Parent->GetClass(), Parent->GetActorLocation() + Direction * Config->FrySpawnDistance, Parent->GetActorRotation(), Params);
+	AFish* Newborn = World->SpawnActor<AFish>(FishClass, Location, Rotation, Params);
 	TrackActor(Newborn); // sans effet si HandleActorSpawned l'a déjà enregistré
 	bSpawningFry = false;
 
@@ -509,9 +615,9 @@ void UEcosystemSubsystem::DrawDebug() const
 	const float Life = 0.25f;
 
 	GEngine->AddOnScreenDebugMessage(94100, Life, StateColor,
-		FString::Printf(TEXT("[Ecosysteme] %s%s | reste %.0f s | adultes %d / %d (+%d alevins)"),
+		FString::Printf(TEXT("[Ecosysteme] %s%s | reste %.0f s | adultes %d / %d (+%d alevins, %d oeufs, %d oeufs perdus)"),
 			*UEnum::GetValueAsString(S.State), S.State == EEcosystemState::Lost ? *FString::Printf(TEXT(" (%s)"), *UEnum::GetValueAsString(S.EndReason)) : TEXT(""),
-			S.TimeRemaining, S.AdultFish, S.ObjectiveAdultFish, S.FryFish));
+			S.TimeRemaining, S.AdultFish, S.ObjectiveAdultFish, S.FryFish, S.Eggs, S.EggsLost));
 	GEngine->AddOnScreenDebugMessage(94101, Life, ZoneColor(S.ZonePollution),
 		FString::Printf(TEXT("  Pollution : %.0f (stress %.0f)"), S.Pollution, S.StressPollution));
 	GEngine->AddOnScreenDebugMessage(94102, Life, ZoneColor(S.ZoneOxygen),

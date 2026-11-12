@@ -12,6 +12,7 @@
 #include "EcosystemSubsystem.generated.h"
 
 class AFish;
+class AFishEgg;
 class AKelp;
 class AFood;
 class ULevelConfig;
@@ -55,6 +56,9 @@ struct FEcosystemSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 AdultFish = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 FryFish = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 Eggs = 0;
+	/** Œufs morts depuis le début (pollution rouge). */
+	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 EggsLost = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 ObjectiveAdultFish = 0;
 
 	/** Variables brutes (0–100). Oxygen : 100 = saturé. */
@@ -144,7 +148,11 @@ private:
 	void Step(float Dt);
 	void UpdateFryScales();
 	float NextReproCooldown() const;
-	void SpawnFry(AFish* Parent);
+	void LayEgg(AFish* Parent);
+	void HatchEgg(AFishEgg* Egg);
+	void SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale);
+	/** Acteur actuellement tenu par la poignée physique du joueur (nullptr sinon). */
+	const AActor* GetHeldActor() const;
 	void SetState(EEcosystemState NewState, EEcosystemEndReason Reason);
 	EEcosystemZone ZoneOf(float Stress) const;
 	float CoefOf(float Stress) const;
@@ -156,6 +164,7 @@ private:
 	TMap<TWeakObjectPtr<AFish>, FFishRecord> Fish;
 	TArray<TWeakObjectPtr<AKelp>> Kelps;
 	TArray<TWeakObjectPtr<AFood>> Foods;
+	TArray<TWeakObjectPtr<AFishEgg>> Eggs;
 	/** Temps restant (s) de chaque cadavre virtuel qui pollue encore. */
 	TArray<float> CorpsePulses;
 
@@ -171,6 +180,7 @@ private:
 	float DefeatTimer = 0.f;
 	float ExtinctionTimer = 0.f;
 	float Accumulator = 0.f;
+	int32 EggsLost = 0;
 	bool bLevelStarted = false;
 
 	// Naissance en cours : la découverte d'acteur (HandleActorSpawned) doit savoir que c'est un alevin.
