@@ -9,10 +9,10 @@
 #include "System/SupportSurface.h"
 #include "DrawDebugHelpers.h"
 #include "LandscapeProxy.h"
+#include "System/FIH2Log.h"
 
 AKelp::AKelp()
 {
-	PrimaryActorTick.bCanEverTick = false;
 	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	
 	AttachConstraint = CreateDefaultSubobject<UPhysicsConstraintComponent>(TEXT("AttachConstraint"));
@@ -54,6 +54,7 @@ void AKelp::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(GrowthTimerHandle);
 	GetWorldTimerManager().ClearTimer(FruitSpawnTimerHandle);
+	GetWorldTimerManager().ClearTimer(ReattachTimerHandle);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -99,14 +100,14 @@ bool AKelp::TryAttach()
 
 	if (!bHit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attach FAILED: ray hit nothing (base %s, down %.0f cm)"),
+		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: ray hit nothing (base %s, down %.0f cm)"),
 			*GetNameSafe(this), *Base.ToString(), AttachTraceDown);
 		return false;
 	}
 
 	AActor* SupportActor = Hit.GetActor();
 	UPrimitiveComponent* SupportComp = Hit.GetComponent();
-	UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Ray hit actor=%s comp=%s"),
+	UE_LOG(LogKelp, Verbose, TEXT("[Kelp %s] Ray hit actor=%s comp=%s"),
 		*GetNameSafe(this), *GetNameSafe(SupportActor), *GetNameSafe(SupportComp));
 
 	if (!SupportActor || !SupportComp)
@@ -126,13 +127,13 @@ bool AKelp::TryAttach()
 
 	if (!bIsValidSupport)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attach FAILED: %s does not implement SupportSurface and is not a Landscape"),
+		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: %s does not implement SupportSurface and is not a Landscape"),
 		   *GetNameSafe(this), *GetNameSafe(SupportActor));
 		return false;
 	}
 	if (!Mesh->IsSimulatingPhysics())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attach FAILED: kelp mesh is not simulating"), *GetNameSafe(this));
+		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: kelp mesh is not simulating"), *GetNameSafe(this));
 		return false;
 	}
 
@@ -151,7 +152,7 @@ bool AKelp::TryAttach()
 
 	if (!AttachConstraint->ConstraintInstance.IsValidConstraintInstance())
 	{
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogKelp, Warning,
 			TEXT("[Kelp %s] Attach FAILED: constraint invalid. %s probably has no physics body (collision must be 'Query and Physics')"),
 			*GetNameSafe(this),*GetNameSafe(SupportComp));
 		return false;
@@ -161,7 +162,7 @@ bool AKelp::TryAttach()
 	bIsAttached = true;
 	AttachedSupport = SupportActor;
 	StrainTimer = 0.f;
-	UE_LOG(LogTemp, Warning, TEXT("[Kelp %s] Attached to %s"), *GetNameSafe(this), *GetNameSafe(SupportActor));
+	UE_LOG(LogKelp, Verbose, TEXT("[Kelp %s] Attached to %s"), *GetNameSafe(this), *GetNameSafe(SupportActor));
 	OnAttachedToSupport.Broadcast(this);
 	return true;
 }
@@ -184,6 +185,12 @@ void AKelp::Detach()
 
 void AKelp::ReportGrabStrain(float Strain, float DeltaTime)
 {
+	// Le kelp est de nouveau tenu : on annule la tentative d'attache différée.
+	if (ReattachTimerHandle.IsValid())
+	{
+		GetWorldTimerManager().ClearTimer(ReattachTimerHandle);
+	}
+
 	if (!bIsAttached)
 	{
 		return;
@@ -207,6 +214,20 @@ void AKelp::ReportGrabStrain(float Strain, float DeltaTime)
 void AKelp::NotifyReleased()
 {
 	StrainTimer = 0.f;
+	if (bIsAttached)
+	{
+		return;
+	}
+
+	// Tentative immédiate, puis une seconde après ReattachRetryDelay (le kelp a pu se poser entre-temps).
+	if (!TryAttach() && ReattachRetryDelay > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(ReattachTimerHandle, this, &AKelp::HandleReattachRetry, ReattachRetryDelay, false);
+	}
+}
+
+void AKelp::HandleReattachRetry()
+{
 	if (!bIsAttached)
 	{
 		TryAttach();

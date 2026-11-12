@@ -77,6 +77,9 @@ public:
 	float DetachHoldTime = 0.4f;
 	UPROPERTY(EditAnywhere, Category = "Kelp|Support")
 	float StrainRecoveryMultiplier = 2.f;
+	/** Délai (s) après le relâchement avant une nouvelle tentative d'attache, si le kelp n'est toujours pas attaché. 0 = désactivé. */
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support", meta = (ClampMin = "0.0"))
+	float ReattachRetryDelay = 3.f;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kelp|Support")
 	bool bIsAttached = false;
 
@@ -148,6 +151,8 @@ protected:
 private:
 	FTimerHandle GrowthTimerHandle;
 	FTimerHandle FruitSpawnTimerHandle;
+	FTimerHandle ReattachTimerHandle;
+	void HandleReattachRetry();
 	float CurrentGrowthTime = 0.0f;
 
 	float StrainTimer = 0.f;
