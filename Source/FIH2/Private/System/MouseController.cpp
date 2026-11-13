@@ -9,6 +9,9 @@
 #include "Fish/Fish.h"
 #include "Inanimate/Kelp.h"
 #include "PhysicsEngine/PhysicsHandleComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Components/MeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "System/Interactable.h"
 
 
@@ -115,11 +118,171 @@ void AMouseController::OnMouseClick()
 				PhysicsHandle->SetInterpolationSpeed(BaseInterpolationSpeed * Factor);
 				
 				GrabAlpha = FMath::Clamp(HitResult.Distance / TraceRange, MinGrabAlpha, 1.f);
+				SelectActor(GrabbedActor);
 				OnActorClicked.Broadcast(GrabbedActor);
 				break;
 			}
 		}
 	}
+
+	// Clic dans le vide ou sur un décor non interactable : on ferme le panneau d'infos.
+	if (!GrabbedActor)
+	{
+		ClearSelection();
+	}
+}
+
+// ============================================================================ Sélection
+
+void AMouseController::SelectActor(AActor* Actor)
+{
+	if (Actor == SelectedActor)
+	{
+		return;
+	}
+	if (SelectedActor)
+	{
+		SelectedActor->OnEndPlay.RemoveDynamic(this, &AMouseController::HandleSelectedEndPlay);
+		RemoveHighlight();
+	}
+
+	SelectedActor = Actor;
+
+	if (SelectedActor)
+	{
+		SelectedActor->OnEndPlay.AddUniqueDynamic(this, &AMouseController::HandleSelectedEndPlay);
+		ApplyHighlight(SelectedActor);
+		// Abonnement aux changements d'infos uniquement pendant qu'un panneau est ouvert.
+		if (!InfoChangedHandle.IsValid())
+		{
+			InfoChangedHandle = FInteractableEvents::OnInfoChanged().AddUObject(this, &AMouseController::HandleInteractableInfoChanged);
+		}
+	}
+	else if (InfoChangedHandle.IsValid())
+	{
+		FInteractableEvents::OnInfoChanged().Remove(InfoChangedHandle);
+		InfoChangedHandle.Reset();
+	}
+
+	OnSelectionChanged.Broadcast(SelectedActor);
+}
+
+void AMouseController::ClearSelection()
+{
+	if (SelectedActor)
+	{
+		SelectActor(nullptr);
+	}
+}
+
+void AMouseController::HandleInteractableInfoChanged(AActor* Actor)
+{
+	if (Actor && Actor == SelectedActor)
+	{
+		OnSelectedInfoChanged.Broadcast(SelectedActor);
+	}
+}
+
+void AMouseController::HandleSelectedEndPlay(AActor* Actor, EEndPlayReason::Type EndPlayReason)
+{
+	if (Actor == SelectedActor)
+	{
+		ClearSelection();
+	}
+}
+
+void AMouseController::ApplyHighlight(AActor* Actor)
+{
+	if (!Actor || !SelectionOverlayMaterial)
+	{
+		return;
+	}
+	TArray<UMeshComponent*> Meshes;
+	Actor->GetComponents<UMeshComponent>(Meshes);
+	for (UMeshComponent* MeshComp : Meshes)
+	{
+		if (!MeshComp || !MeshComp->IsVisible())
+		{
+			continue;
+		}
+		SavedOverlays.Add(MeshComp, MeshComp->GetOverlayMaterial());
+		MeshComp->SetOverlayMaterial(SelectionOverlayMaterial);
+	}
+}
+
+void AMouseController::RemoveHighlight()
+{
+	for (const auto& Pair : SavedOverlays)
+	{
+		if (UMeshComponent* MeshComp = Pair.Key.Get())
+		{
+			MeshComp->SetOverlayMaterial(Pair.Value.Get());
+		}
+	}
+	SavedOverlays.Reset();
+}
+
+void AMouseController::FocusOnSelection()
+{
+	APawn* ViewPawn = GetPawn();
+	USpringArmComponent* Arm = ViewPawn ? ViewPawn->FindComponentByClass<USpringArmComponent>() : nullptr;
+	if (!SelectedActor || !Arm)
+	{
+		return;
+	}
+
+	FVector Origin, Extent;
+	SelectedActor->GetActorBounds(true, Origin, Extent);
+	const float Radius = FMath::Max(Extent.Size(), 1.f);
+
+	FocusArm = Arm;
+	FocusStartLocation = Arm->GetComponentLocation();
+	FocusEndLocation = Origin;
+	FocusStartArmLength = Arm->TargetArmLength;
+	FocusEndArmLength = FMath::Max(FocusMinArmLength, Radius * FocusDistanceFactor);
+	FocusElapsed = 0.f;
+
+	if (FocusDuration <= KINDA_SMALL_NUMBER)
+	{
+		UpdateFocus(0.f);
+	}
+}
+
+void AMouseController::UpdateFocus(float DeltaTime)
+{
+	if (FocusElapsed < 0.f)
+	{
+		return;
+	}
+	USpringArmComponent* Arm = FocusArm.Get();
+	if (!Arm)
+	{
+		FocusElapsed = -1.f;
+		return;
+	}
+
+	FocusElapsed += DeltaTime;
+	const float Alpha = FocusDuration > KINDA_SMALL_NUMBER ? FMath::Clamp(FocusElapsed / FocusDuration, 0.f, 1.f) : 1.f;
+	const float Eased = FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f);
+
+	Arm->SetWorldLocation(FMath::Lerp(FocusStartLocation, FocusEndLocation, Eased));
+	Arm->TargetArmLength = FMath::Lerp(FocusStartArmLength, FocusEndArmLength, Eased);
+
+	if (Alpha >= 1.f)
+	{
+		FocusElapsed = -1.f;
+	}
+}
+
+void AMouseController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (InfoChangedHandle.IsValid())
+	{
+		FInteractableEvents::OnInfoChanged().Remove(InfoChangedHandle);
+		InfoChangedHandle.Reset();
+	}
+	RemoveHighlight();
+	Super::EndPlay(EndPlayReason);
 }
 
 void AMouseController::AdjustGrabDistance(float AxisValue)
@@ -203,4 +366,5 @@ void AMouseController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	UpdateDragTarget(DeltaTime);
+	UpdateFocus(DeltaTime);
 }

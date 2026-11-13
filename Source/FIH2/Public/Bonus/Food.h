@@ -126,6 +126,8 @@ public:
 	virtual void OnThrown_Implementation(FVector ThrowVelocity) override;
 	virtual FText GetName_Implementation() override;
 	virtual FText GetDescription_Implementation() override;
+	/** Jauge « Growth » tant que le fruit pousse sur le kelp (comme l'alevin) ; rien une fois mûr. */
+	virtual bool GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel) override;
 
 protected:
 	virtual void BeginPlay() override;

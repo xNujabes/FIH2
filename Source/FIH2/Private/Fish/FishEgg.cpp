@@ -48,3 +48,20 @@ FText AFishEgg::GetDescription_Implementation()
 	return FText::FromString(FString::Printf(
 		TEXT("Hatches in %.0f s.\nDies if the water gets too polluted."), FMath::Max(0.f, IncubationRemaining)));
 }
+
+void AFishEgg::AdvanceIncubation(float DeltaSeconds)
+{
+	const int32 ShownBefore = FMath::CeilToInt(FMath::Max(0.f, IncubationRemaining));
+	IncubationRemaining -= DeltaSeconds;
+	if (FMath::CeilToInt(FMath::Max(0.f, IncubationRemaining)) != ShownBefore)
+	{
+		FInteractableEvents::NotifyInfoChanged(this);
+	}
+}
+
+bool AFishEgg::GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel)
+{
+	OutProgress = GetIncubationProgress();
+	OutLabel = FText::FromString(TEXT("Incubation"));
+	return true;
+}

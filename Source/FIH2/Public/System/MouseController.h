@@ -10,6 +10,9 @@
 // AI Given solution 
 class UPhysicsHandleComponent;
 class UInputAction;
+class UMaterialInterface;
+class UMeshComponent;
+class USpringArmComponent;
 /**
  * 
  */
@@ -42,6 +45,44 @@ public:
 	
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Interaction")
 	FOnActorClicked OnActorClicked;
+
+	// ---------------------------------------------------------------- Sélection
+	/** Émis quand la sélection change. NewSelection = nullptr : plus rien de sélectionné (fermer le panneau). */
+	UPROPERTY(BlueprintAssignable, Category = "Selection")
+	FOnActorClicked OnSelectionChanged;
+
+	/** Émis quand les infos de l'acteur sélectionné changent (jamais quand rien n'est sélectionné). */
+	UPROPERTY(BlueprintAssignable, Category = "Selection")
+	FOnActorClicked OnSelectedInfoChanged;
+
+	/** Matériau de surbrillance appliqué en « overlay » sur les meshes de l'acteur sélectionné (vide = pas de surbrillance). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	TObjectPtr<UMaterialInterface> SelectionOverlayMaterial;
+
+	/** FOCUS_DUREE [s] : durée du déplacement de caméra de la loupe. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection|Focus", meta = (ClampMin = "0"))
+	float FocusDuration = 0.6f;
+
+	/** FOCUS_DISTANCE_FACTEUR : distance caméra = rayon des bornes de l'acteur × ce facteur. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection|Focus", meta = (ClampMin = "0.5"))
+	float FocusDistanceFactor = 4.f;
+
+	/** FOCUS_DISTANCE_MIN [cm] : distance caméra minimale (petits objets). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection|Focus", meta = (ClampMin = "0"))
+	float FocusMinArmLength = 300.f;
+
+	UFUNCTION(BlueprintCallable, Category = "Selection")
+	void SelectActor(AActor* Actor);
+
+	UFUNCTION(BlueprintCallable, Category = "Selection")
+	void ClearSelection();
+
+	UFUNCTION(BlueprintPure, Category = "Selection")
+	AActor* GetSelectedActor() const { return SelectedActor; }
+
+	/** Loupe : amène la caméra (bras de caméra du pion) juste devant l'acteur sélectionné, sans changer l'angle de vue. */
+	UFUNCTION(BlueprintCallable, Category = "Selection")
+	void FocusOnSelection();
 	
 	UPROPERTY(EditAnywhere, Category="Interaction") 
 	float GrabScrollSpeed = 0.05f;
@@ -69,8 +110,34 @@ public:
 	UFUNCTION(BlueprintPure) bool GetIsDragging() const { return bIsDragging; }
 	
 	void UpdateDragTarget(float DeltaTime);
+	void UpdateFocus(float DeltaTime);
 	void OnMouseClick();
 	void OnMouseRelease();
 	void OnMouseMoved();
 	virtual void PlayerTick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> SelectedActor;
+
+	/** Overlays d'origine des meshes surlignés, restaurés à la désélection. */
+	TMap<TWeakObjectPtr<UMeshComponent>, TWeakObjectPtr<UMaterialInterface>> SavedOverlays;
+
+	FDelegateHandle InfoChangedHandle;
+
+	// Interpolation de la loupe
+	TWeakObjectPtr<USpringArmComponent> FocusArm;
+	FVector FocusStartLocation = FVector::ZeroVector;
+	FVector FocusEndLocation = FVector::ZeroVector;
+	float FocusStartArmLength = 0.f;
+	float FocusEndArmLength = 0.f;
+	float FocusElapsed = -1.f; // < 0 : pas de focus en cours
+
+	void ApplyHighlight(AActor* Actor);
+	void RemoveHighlight();
+	void HandleInteractableInfoChanged(AActor* Actor);
+
+	UFUNCTION()
+	void HandleSelectedEndPlay(AActor* Actor, EEndPlayReason::Type EndPlayReason);
 };

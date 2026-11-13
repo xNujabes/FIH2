@@ -47,4 +47,8 @@ public:
 
 	virtual FText GetName_Implementation() override;
 	virtual FText GetDescription_Implementation() override;
+	virtual bool GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel) override;
+
+	/** Fait avancer l'incubation ; prévient le panneau d'infos quand la seconde affichée change. */
+	void AdvanceIncubation(float DeltaSeconds);
 };

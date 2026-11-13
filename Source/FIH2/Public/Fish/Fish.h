@@ -10,6 +10,8 @@
 #include "Fish.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnHungerChangedDelegate);
+class AFish;
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFishGrowthProgressChangedDelegate, AFish*, Fish, float, NewProgress);
 
 UENUM(BlueprintType)
 enum class EFoodPreferences : uint8
@@ -117,7 +119,15 @@ protected:
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "Fish|Status")
 	EFoodPreferences FoodPreferences = EFoodPreferences::Herbivore;
 
+	/** Croissance de l'alevin : 0 à la naissance, 1 = adulte (piloté par UEcosystemSubsystem, comme le kelp). */
+	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Growth")
+	float GrowthProgress = 1.f;
+
 public:
+	/** Émis quand la croissance de l'alevin avance (au plus une fois par point de pourcentage). */
+	UPROPERTY(BlueprintAssignable, Category = "Fish|Growth")
+	FOnFishGrowthProgressChangedDelegate OnGrowthProgressChanged;
+
 	/** Reproduction, œuf et alevin de cette espèce (lus par UEcosystemSubsystem). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Fish|Reproduction")
 	FFishReproductionSettings Reproduction;
@@ -154,6 +164,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Fish|Status")
 	void SetIsStimulated(bool bNewStimulated);
 	
+	UFUNCTION(BlueprintPure, Category = "Fish|Growth")
+	float GetGrowthProgress() const { return GrowthProgress; }
+
+	UFUNCTION(BlueprintPure, Category = "Fish|Growth")
+	bool IsAdult() const { return GrowthProgress >= 1.f; }
+
+	/** Fixe la croissance (0–1). Diffuse OnGrowthProgressChanged seulement si le pourcentage entier change. */
+	UFUNCTION(BlueprintCallable, Category = "Fish|Growth")
+	void SetGrowthProgress(float InProgress);
+
 	virtual FText GetName_Implementation() override;
 	virtual FText GetDescription_Implementation() override;
+	virtual bool GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel) override;
 };

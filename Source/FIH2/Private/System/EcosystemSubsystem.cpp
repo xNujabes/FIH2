@@ -358,7 +358,7 @@ void UEcosystemSubsystem::Step(float Dt)
 			AFishEgg* Egg = WeakEgg.Get();
 			if (!Egg || Egg == HeldActor) { continue; }
 			if (bPollutionRed && Egg->bDiesInRedPollution) { ToKill.Add(Egg); continue; }
-			Egg->IncubationRemaining -= Dt;
+			Egg->AdvanceIncubation(Dt);
 			if (Egg->IncubationRemaining <= 0.f) { ToHatch.Add(Egg); }
 		}
 		for (AFishEgg* Egg : ToKill)
@@ -398,6 +398,7 @@ void UEcosystemSubsystem::Step(float Dt)
 				Record.bAdult = true;
 				Record.ReproTimer = NextReproCooldown(F->Reproduction);
 				F->SetActorScale3D(Record.AdultScale);
+				F->SetGrowthProgress(1.f);
 			}
 			continue;
 		}
@@ -482,6 +483,7 @@ void UEcosystemSubsystem::UpdateFryScales()
 		const FFishReproductionSettings& R = F->Reproduction;
 		const float Alpha = FMath::Clamp(static_cast<float>((Now - Pair.Value.BornTime) / R.MaturationTime), 0.f, 1.f);
 		F->SetActorScale3D(Pair.Value.AdultScale * FMath::Lerp(R.FryStartScale, 1.f, Alpha));
+		F->SetGrowthProgress(FMath::Min(Alpha, 0.999f)); // 1 (adulte) est posé par la maturation, pas ici
 	}
 }
 
@@ -592,6 +594,7 @@ void UEcosystemSubsystem::SpawnFry(TSubclassOf<AFish> FishClass, const FVector& 
 	}
 
 	Newborn->SetActorScale3D(AdultScale * Newborn->Reproduction.FryStartScale);
+	Newborn->SetGrowthProgress(0.f);
 	Newborn->SetHunger(Newborn->Reproduction.FryStartHunger);
 	if (!Newborn->GetController())
 	{

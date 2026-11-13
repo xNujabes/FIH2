@@ -146,6 +146,7 @@ public:
 	
 	virtual FText GetName_Implementation() override;
 	virtual FText GetDescription_Implementation() override;
+	virtual bool GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel) override;
 
 protected:
 	virtual void BeginPlay() override;

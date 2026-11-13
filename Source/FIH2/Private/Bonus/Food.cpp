@@ -195,6 +195,7 @@ void AFood::StartGrowth()
 
 		OnFullyGrown.Broadcast(this);
 		OnGrowthStateChanged.Broadcast(this, EFoodGrowthState::FullyGrown);
+		FInteractableEvents::NotifyInfoChanged(this);
 		GetWorldTimerManager().SetTimer(FullyGrownTimerHandle, this, &AFood::DetachFruit, FullyGrownDuration, false);
 		return;
 	}
@@ -204,9 +205,16 @@ void AFood::StartGrowth()
 
 void AFood::UpdateGrowth()
 {
+	const int32 PercentBefore = FMath::FloorToInt(FMath::Clamp(CurrentGrowthTime / GrowthDuration, 0.0f, 1.0f) * 100.0f);
 	CurrentGrowthTime += GrowthUpdateInterval;
 	const float Alpha = FMath::Clamp(CurrentGrowthTime / GrowthDuration, 0.0f, 1.0f);
 	SetActorScale3D(FMath::Lerp(InitialGrowthScale, MatureGrowthScale, Alpha));
+
+	// Panneau d'infos : une notification par point de pourcentage, pas à chaque pas du timer (0,05 s).
+	if (Alpha < 1.0f && FMath::FloorToInt(Alpha * 100.0f) != PercentBefore)
+	{
+		FInteractableEvents::NotifyInfoChanged(this);
+	}
 
 	if (Alpha >= 1.0f)
 	{
@@ -233,6 +241,7 @@ void AFood::UpdateGrowth()
 
 		OnFullyGrown.Broadcast(this);
 		OnGrowthStateChanged.Broadcast(this, EFoodGrowthState::FullyGrown);
+		FInteractableEvents::NotifyInfoChanged(this);
 
 		GetWorldTimerManager().SetTimer(FullyGrownTimerHandle, this, &AFood::DetachFruit, FullyGrownDuration, false);
 	}
@@ -278,6 +287,7 @@ void AFood::DetachFruit()
 	SetGrowthState(EFoodGrowthState::Detached);
 	OnDetached.Broadcast(this);
 	OnGrowthStateChanged.Broadcast(this, EFoodGrowthState::Detached);
+	FInteractableEvents::NotifyInfoChanged(this);
 
 	if (!bDecayStartsOnLanding)
 	{
@@ -318,6 +328,7 @@ void AFood::StartDecay()
 
 	OnDecayStarted.Broadcast(this);
 	OnGrowthStateChanged.Broadcast(this, EFoodGrowthState::Decaying);
+	FInteractableEvents::NotifyInfoChanged(this);
 
 	if (DecayDuration <= 0.0f)
 	{
@@ -475,7 +486,10 @@ FText AFood::GetDescription_Implementation()
 	FString StateStr;
 	switch(CurrentGrowthState) 
 	{
-	case EFoodGrowthState::Growing: StateStr = TEXT("Growing"); break;
+	case EFoodGrowthState::Growing:
+		StateStr = FString::Printf(TEXT("Growing (%d%%)"),
+			FMath::FloorToInt(FMath::Clamp(CurrentGrowthTime / GrowthDuration, 0.0f, 1.0f) * 100.0f));
+		break;
 	case EFoodGrowthState::FullyGrown: StateStr = TEXT("Fresh"); break;
 	case EFoodGrowthState::Detached: StateStr = TEXT("Dropped"); break;
 	case EFoodGrowthState::Decaying: StateStr = TEXT("Decaying"); break;
@@ -484,4 +498,15 @@ FText AFood::GetDescription_Implementation()
 
 	FString Desc = FString::Printf(TEXT("State: %s\nNutrition: +%.1f Hunger"), *StateStr, HungerRestoreAmount);
 	return FText::FromString(Desc);
+}
+
+bool AFood::GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel)
+{
+	if (CurrentGrowthState != EFoodGrowthState::Growing)
+	{
+		return false;
+	}
+	OutProgress = FMath::Clamp(CurrentGrowthTime / GrowthDuration, 0.0f, 1.0f);
+	OutLabel = FText::FromString(TEXT("Growth"));
+	return true;
 }

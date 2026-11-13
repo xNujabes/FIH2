@@ -50,12 +50,14 @@ void AFish::SetHunger(int32 NewHunger)
 {
 	Hunger = FMath::Clamp(NewHunger, 0, 3);
 	OnHungerChanged.Broadcast();
+	FInteractableEvents::NotifyInfoChanged(this);
 }
 
 void AFish::AddHunger(int32 AddedHunger)
 {
 	Hunger = FMath::Clamp(Hunger + AddedHunger, 0, 3);
 	OnHungerChanged.Broadcast();
+	FInteractableEvents::NotifyInfoChanged(this);
 }
 
 
@@ -78,7 +80,35 @@ bool AFish::IsStimulated() const
 
 void AFish::SetIsStimulated(bool bNewStimulated)
 {
+	if (bIsStimulated == bNewStimulated)
+	{
+		return;
+	}
 	bIsStimulated = bNewStimulated;
+	FInteractableEvents::NotifyInfoChanged(this);
+}
+
+void AFish::SetGrowthProgress(float InProgress)
+{
+	const float NewProgress = FMath::Clamp(InProgress, 0.f, 1.f);
+	const bool bPercentChanged = FMath::FloorToInt(NewProgress * 100.f) != FMath::FloorToInt(GrowthProgress * 100.f);
+	GrowthProgress = NewProgress;
+	if (bPercentChanged)
+	{
+		OnGrowthProgressChanged.Broadcast(this, GrowthProgress);
+		FInteractableEvents::NotifyInfoChanged(this);
+	}
+}
+
+bool AFish::GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel)
+{
+	if (IsAdult())
+	{
+		return false;
+	}
+	OutProgress = GrowthProgress;
+	OutLabel = FText::FromString(TEXT("Growth"));
+	return true;
 }
 
 FText AFish::GetName_Implementation()
@@ -89,7 +119,10 @@ FText AFish::GetName_Implementation()
 FText AFish::GetDescription_Implementation()
 {
 	FString StimulatedStr = bIsStimulated ? TEXT("Yes") : TEXT("No");
-	FString Desc = FString::Printf(TEXT("Hunger Level: %d\nStimulated: %s"), Hunger, *StimulatedStr);
+	const FString StageStr = IsAdult()
+		? FString(TEXT("Adult"))
+		: FString::Printf(TEXT("Fry (%d%%)"), FMath::FloorToInt(GrowthProgress * 100.f));
+	FString Desc = FString::Printf(TEXT("Stage: %s\nHunger Level: %d\nStimulated: %s"), *StageStr, Hunger, *StimulatedStr);
     
 	return FText::FromString(Desc);
 }

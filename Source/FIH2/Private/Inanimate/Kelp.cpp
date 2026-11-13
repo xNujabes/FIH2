@@ -8,8 +8,15 @@
 #include "PhysicsEngine/PhysicsConstraintComponent.h"
 #include "System/SupportSurface.h"
 #include "DrawDebugHelpers.h"
+#include "HAL/IConsoleManager.h"
 #include "LandscapeProxy.h"
 #include "System/FIH2Log.h"
+
+// Tracé de debug du rayon d'accrochage du kelp (désactivé par défaut). En jeu : fih2.Kelp.DrawAttachDebug 1
+static TAutoConsoleVariable<bool> CVarKelpDrawAttachDebug(
+	TEXT("fih2.Kelp.DrawAttachDebug"),
+	false,
+	TEXT("Dessine le rayon d'accrochage des kelps (vert = sol trouvé, rouge = rien)."));
 
 AKelp::AKelp()
 {
@@ -109,7 +116,10 @@ bool AKelp::TryAttachWithTrace(float TraceUp, float TraceDown, bool bScaleBySize
 	FHitResult Hit;
 	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, AttachTraceChannel, Params);
 
-	DrawDebugLine(GetWorld(), Start, End, bHit ? FColor::Green : FColor::Red, false, 5.f, 0, 1.f);
+	if (CVarKelpDrawAttachDebug.GetValueOnGameThread())
+	{
+		DrawDebugLine(GetWorld(), Start, End, bHit ? FColor::Green : FColor::Red, false, 5.f, 0, 1.f);
+	}
 
 	if (!bHit)
 	{
@@ -299,6 +309,7 @@ void AKelp::SetGrowthProgress(float InProgress)
 	SetActorScale3D(NewScale);
 
 	OnGrowthProgressChanged.Broadcast(this, GrowthProgress);
+	FInteractableEvents::NotifyInfoChanged(this);
 
 	if (GrowthProgress >= 1.0f && !bIsMature)
 	{
@@ -324,6 +335,7 @@ void AKelp::UpdateGrowth()
 	SetActorScale3D(NewScale);
 
 	OnGrowthProgressChanged.Broadcast(this, GrowthProgress);
+	FInteractableEvents::NotifyInfoChanged(this);
 
 	if (GrowthProgress >= 1.0f)
 	{
@@ -345,6 +357,7 @@ void AKelp::OnMatured()
 	// TODO: Kelp produces oxygen (e.g. register with AOxygenManager or broadcast oxygen production per interval)
 
 	OnKelpMatured.Broadcast(this);
+	FInteractableEvents::NotifyInfoChanged(this);
 	StartFruitSpawning();
 }
 
@@ -537,6 +550,7 @@ bool AKelp::TrySpawnFruit()
 		NewFruit->OnDestroyed.AddDynamic(this, &AKelp::HandleFruitDestroyed);
 
 		OnFruitSpawned.Broadcast(this, NewFruit);
+		FInteractableEvents::NotifyInfoChanged(this);
 		return true;
 	}
 
@@ -549,6 +563,7 @@ void AKelp::HandleFruitDetached(AFood* DetachedFruit)
 	{
 		ActiveFruits.Remove(DetachedFruit);
 		OnFruitDetached.Broadcast(this, DetachedFruit);
+		FInteractableEvents::NotifyInfoChanged(this);
 	}
 }
 
@@ -575,4 +590,15 @@ FText AKelp::GetDescription_Implementation()
 		*MatureStr, Percent, GetActiveFruitCount(), MaxFruitCount);
         
 	return FText::FromString(Desc);
+}
+
+bool AKelp::GetInfoProgress_Implementation(float& OutProgress, FText& OutLabel)
+{
+	if (bIsMature)
+	{
+		return false;
+	}
+	OutProgress = GrowthProgress;
+	OutLabel = FText::FromString(TEXT("Growth"));
+	return true;
 }
