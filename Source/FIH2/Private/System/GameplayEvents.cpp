@@ -23,3 +23,21 @@ FOnPlayerActorNative& FGameplayEvents::OnFocusUsed()
 	static FOnPlayerActorNative Delegate;
 	return Delegate;
 }
+
+FOnEggNative& FGameplayEvents::OnEggLaid()
+{
+	static FOnEggNative Delegate;
+	return Delegate;
+}
+
+FOnEggHatchedNative& FGameplayEvents::OnEggHatched()
+{
+	static FOnEggHatchedNative Delegate;
+	return Delegate;
+}
+
+FOnEggNative& FGameplayEvents::OnEggDied()
+{
+	static FOnEggNative Delegate;
+	return Delegate;
+}

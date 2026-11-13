@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Fish/Fish.h"
+#include "Fish/FishEgg.h"
 #include "InputAction.h"
 #include "Materials/MaterialInterface.h"
 #include "System/GameplayEvents.h"
@@ -55,6 +56,9 @@ void UTutorialSubsystem::Deinitialize()
 	FGameplayEvents::OnFocusUsed().Remove(FocusHandle);
 	FGameplayEvents::OnActorReleased().Remove(ReleasedHandle);
 	FGameplayEvents::OnFishAte().Remove(FishAteHandle);
+	FGameplayEvents::OnEggLaid().Remove(EggLaidHandle);
+	FGameplayEvents::OnEggHatched().Remove(EggHatchedHandle);
+	FGameplayEvents::OnEggDied().Remove(EggDiedHandle);
 	Super::Deinitialize();
 }
 
@@ -83,6 +87,9 @@ void UTutorialSubsystem::StartTutorial(UTutorialSequence* InSequence)
 	FocusHandle = FGameplayEvents::OnFocusUsed().AddUObject(this, &UTutorialSubsystem::HandleFocusUsed);
 	ReleasedHandle = FGameplayEvents::OnActorReleased().AddUObject(this, &UTutorialSubsystem::HandleActorReleased);
 	FishAteHandle = FGameplayEvents::OnFishAte().AddUObject(this, &UTutorialSubsystem::HandleFishAte);
+	EggLaidHandle = FGameplayEvents::OnEggLaid().AddUObject(this, &UTutorialSubsystem::HandleEggLaid);
+	EggHatchedHandle = FGameplayEvents::OnEggHatched().AddUObject(this, &UTutorialSubsystem::HandleEggHatched);
+	EggDiedHandle = FGameplayEvents::OnEggDied().AddUObject(this, &UTutorialSubsystem::HandleEggDied);
 
 	if (APlayerController* PC = World->GetFirstPlayerController())
 	{
@@ -122,6 +129,40 @@ void UTutorialSubsystem::EnterStep(int32 Index)
 	UE_LOG(LogTutorial, Log, TEXT("Étape %d : %s"), Index, *UEnum::GetValueAsString(Step.Condition));
 
 	ApplyHighlight(Step.HighlightTag);
+
+	if (!Step.CameraFocusTag.IsNone())
+	{
+		if (AMouseController* PC = Cast<AMouseController>(World->GetFirstPlayerController()))
+		{
+			PC->FocusOnActors(GetActorsWithTag(Step.CameraFocusTag));
+		}
+	}
+
+	if (Step.bFocusEventActor && LastEventActor.IsValid())
+	{
+		TArray<AActor*> EventActors = { LastEventActor.Get() };
+		if (AMouseController* PC = Cast<AMouseController>(World->GetFirstPlayerController()))
+		{
+			PC->FocusOnActors(EventActors);
+		}
+		HighlightActors(EventActors);
+	}
+
+	if (Step.ShortenReproTimersTo > 0.f)
+	{
+		if (UEcosystemSubsystem* Eco = Ecosystem.Get())
+		{
+			Eco->ShortenReproTimers(Step.ShortenReproTimersTo);
+		}
+	}
+
+	if (Step.SetFishHungerOnEnter >= 0)
+	{
+		for (TActorIterator<AFish> It(World); It; ++It)
+		{
+			It->SetHunger(Step.SetFishHungerOnEnter);
+		}
+	}
 
 	FTimerManager& Timers = World->GetTimerManager();
 	switch (Step.Condition)
@@ -223,9 +264,10 @@ void UTutorialSubsystem::Next()
 
 void UTutorialSubsystem::Skip()
 {
-	if (!IsRunning())
+	const FTutorialStep* Step = CurrentStep();
+	if (!Step || Step->Condition == ETutorialCondition::Maintain)
 	{
-		return;
+		return; // pendant le maintien, « passer » finirait le tutoriel sans victoire possible (partie sans fin)
 	}
 	for (int32 i = CurrentIndex + 1; i < Sequence->Steps.Num(); ++i)
 	{
@@ -251,6 +293,9 @@ void UTutorialSubsystem::FinishTutorial(bool bWon)
 	FGameplayEvents::OnFocusUsed().Remove(FocusHandle);
 	FGameplayEvents::OnActorReleased().Remove(ReleasedHandle);
 	FGameplayEvents::OnFishAte().Remove(FishAteHandle);
+	FGameplayEvents::OnEggLaid().Remove(EggLaidHandle);
+	FGameplayEvents::OnEggHatched().Remove(EggHatchedHandle);
+	FGameplayEvents::OnEggDied().Remove(EggDiedHandle);
 
 	if (UEcosystemSubsystem* Eco = Ecosystem.Get())
 	{
@@ -450,54 +495,65 @@ void UTutorialSubsystem::UpdateMaintain(const FEcosystemSnapshot& Snapshot)
 
 void UTutorialSubsystem::ApplyHighlight(FName Tag)
 {
+	if (!Tag.IsNone())
+	{
+		HighlightActors(GetActorsWithTag(Tag));
+	}
+}
+
+void UTutorialSubsystem::HighlightActors(const TArray<AActor*>& Actors)
+{
 	UWorld* World = GetWorld();
-	if (Tag.IsNone() || !World || !Sequence)
+	if (!World || !Sequence)
 	{
 		return;
 	}
-
-	UMaterialInterface* Material = Sequence->HighlightMaterial;
-	if (!Material)
-	{
-		if (const AMouseController* PC = Cast<AMouseController>(World->GetFirstPlayerController()))
-		{
-			Material = PC->SelectionOverlayMaterial;
-		}
-	}
-	if (!Material)
+	// La surbrillance passe par le contrôleur, qui la concilie avec celle de la sélection (sinon un kelp attrapé
+	// pendant l'étape restait surligné après elle : test du 13/11).
+	AMouseController* PC = Cast<AMouseController>(World->GetFirstPlayerController());
+	UMaterialInterface* Material = Sequence->HighlightMaterial ? Sequence->HighlightMaterial.Get()
+		: (PC ? PC->SelectionOverlayMaterial.Get() : nullptr);
+	if (!PC || !Material)
 	{
 		return;
 	}
-
-	for (TActorIterator<AActor> It(World); It; ++It)
+	for (AActor* Actor : Actors)
 	{
-		if (!It->ActorHasTag(Tag))
+		if (Actor)
 		{
-			continue;
-		}
-		TArray<UMeshComponent*> Meshes;
-		It->GetComponents<UMeshComponent>(Meshes);
-		for (UMeshComponent* MeshComp : Meshes)
-		{
-			if (MeshComp && MeshComp->IsVisible())
-			{
-				SavedOverlays.Add(MeshComp, MeshComp->GetOverlayMaterial());
-				MeshComp->SetOverlayMaterial(Material);
-			}
+			PC->SetPersistentHighlight(Actor, Material);
+			HighlightedActors.Add(Actor);
 		}
 	}
 }
 
 void UTutorialSubsystem::RemoveHighlight()
 {
-	for (const auto& Pair : SavedOverlays)
+	UWorld* World = GetWorld();
+	if (AMouseController* PC = World ? Cast<AMouseController>(World->GetFirstPlayerController()) : nullptr)
 	{
-		if (UMeshComponent* MeshComp = Pair.Key.Get())
+		for (const TWeakObjectPtr<AActor>& Actor : HighlightedActors)
 		{
-			MeshComp->SetOverlayMaterial(Pair.Value.Get());
+			PC->SetPersistentHighlight(Actor.Get(), nullptr);
 		}
 	}
-	SavedOverlays.Reset();
+	HighlightedActors.Reset();
+}
+
+TArray<AActor*> UTutorialSubsystem::GetActorsWithTag(FName Tag) const
+{
+	TArray<AActor*> Result;
+	if (UWorld* World = GetWorld(); World && !Tag.IsNone())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(Tag))
+			{
+				Result.Add(*It);
+			}
+		}
+	}
+	return Result;
 }
 
 // ------------------------------------------------------------------ Entrées
@@ -553,10 +609,65 @@ void UTutorialSubsystem::HandleInputAction(const FInputActionInstance& Instance)
 void UTutorialSubsystem::HandleActorSelected(AActor* Actor)
 {
 	const FTutorialStep* Step = CurrentStep();
-	if (Step && Actor && Step->Condition == ETutorialCondition::SelectActorOfClass
-		&& (!Step->TargetClass || Actor->IsA(Step->TargetClass)))
+	if (!Step || !Actor)
+	{
+		return;
+	}
+	if (Step->Condition == ETutorialCondition::SelectActorOfClass && (!Step->TargetClass || Actor->IsA(Step->TargetClass)))
 	{
 		CompleteCurrentStep();
+	}
+	else if (Step->Condition == ETutorialCondition::SelectFry)
+	{
+		// L'alevin qui vient de naître compte même s'il est déjà devenu adulte (le joueur a pu tarder).
+		const AFish* Fish = Cast<AFish>(Actor);
+		if (Fish && (Actor == LastEventActor.Get() || !Fish->IsAdult()))
+		{
+			CompleteCurrentStep();
+		}
+	}
+}
+
+void UTutorialSubsystem::HandleEggLaid(AFishEgg* Egg)
+{
+	const FTutorialStep* Step = CurrentStep();
+	if (Step && Egg && Step->Condition == ETutorialCondition::EggLaid)
+	{
+		LastEventActor = Egg; // l'étape suivante (incubation) suit cet œuf
+		CompleteCurrentStep();
+	}
+}
+
+void UTutorialSubsystem::HandleEggHatched(AFishEgg* Egg, AFish* Fry)
+{
+	const FTutorialStep* Step = CurrentStep();
+	if (Step && Step->Condition == ETutorialCondition::EggHatched)
+	{
+		LastEventActor = Fry; // l'étape suivante (alevin) suit cet alevin
+		CompleteCurrentStep();
+	}
+}
+
+void UTutorialSubsystem::HandleEggDied(AFishEgg* Egg)
+{
+	const FTutorialStep* Step = CurrentStep();
+	if (!Step || !Egg || Step->Condition != ETutorialCondition::EggHatched || Egg != LastEventActor.Get())
+	{
+		return;
+	}
+	// Décision du 13/11 : l'œuf suivi meurt → retour à l'étape de ponte précédente, avec un message.
+	for (int32 i = CurrentIndex - 1; i >= 0; --i)
+	{
+		if (Sequence->Steps[i].Condition == ETutorialCondition::EggLaid)
+		{
+			LastEventActor.Reset();
+			EnterStep(i);
+			if (Panel)
+			{
+				Panel->ShowResetMessage(Sequence->EggLostMessage, 4.f);
+			}
+			return;
+		}
 	}
 }
 
@@ -580,8 +691,16 @@ void UTutorialSubsystem::HandleActorReleased(AActor* Actor)
 void UTutorialSubsystem::HandleFishAte(AFish* Fish, AActor* Food)
 {
 	const FTutorialStep* Step = CurrentStep();
-	if (Step && Step->Condition == ETutorialCondition::FishAte
-		&& (!Step->bRequirePlayerFood || PlayerReleasedFood.Contains(Food)))
+	if (!Step || Step->Condition != ETutorialCondition::FishAte)
+	{
+		return;
+	}
+	// Un poisson mange un fruit dès qu'il le touche, souvent pendant que le joueur le tient encore :
+	// le fruit tenu compte comme nourriture du joueur (sinon le lâcher arrive après le repas : test du 13/11).
+	const UWorld* World = GetWorld();
+	const AMouseController* PC = World ? Cast<AMouseController>(World->GetFirstPlayerController()) : nullptr;
+	const bool bHeldByPlayer = PC && Food && PC->GrabbedActor == Food;
+	if (!Step->bRequirePlayerFood || bHeldByPlayer || PlayerReleasedFood.Contains(Food))
 	{
 		CompleteCurrentStep();
 	}

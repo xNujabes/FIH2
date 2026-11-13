@@ -36,7 +36,13 @@ enum class ETutorialCondition : uint8
 	/** Tous les acteurs tagués TargetTag sont à moins de NearRadius d'un acteur tagué ReferenceTag. */
 	TaggedActorsNear UMETA(DisplayName = "Acteurs rapprochés"),
 	/** Étape finale : défaite et mort par la faim réactivées, maintenir la jauge hors du rouge pendant Duration. */
-	Maintain UMETA(DisplayName = "Maintien (étape finale)")
+	Maintain UMETA(DisplayName = "Maintien (étape finale)"),
+	/** Un poisson pond un œuf. */
+	EggLaid UMETA(DisplayName = "Œuf pondu"),
+	/** Un œuf éclot. Si l'œuf suivi meurt, retour à l'étape EggLaid précédente. */
+	EggHatched UMETA(DisplayName = "Œuf éclos"),
+	/** Le joueur sélectionne un alevin (ou l'alevin qui vient de naître, même devenu adulte). */
+	SelectFry UMETA(DisplayName = "Sélection d'un alevin")
 };
 
 /** Variable observée par la condition GaugeZoneReached. */
@@ -105,6 +111,22 @@ struct FTutorialStep
 		EditCondition = "Condition == ETutorialCondition::TaggedActorsNear", EditConditionHides))
 	float NearRadius = 1500.f;
 
+	/** En entrant dans l'étape : caméra cadrée et surbrillance sur le dernier acteur apparu (œuf pondu, alevin né). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
+	bool bFocusEventActor = false;
+
+	/** TUTO_DELAI_PONTE [s] (8 [5–20]) : en entrant dans l'étape, la prochaine ponte de chaque adulte arrive au plus tard dans ce délai, s'il est nourri (0 = inchangé). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (ClampMin = "0"))
+	float ShortenReproTimersTo = 0.f;
+
+	/** La caméra se cadre sur les acteurs portant ce tag en entrant dans l'étape (vide = caméra laissée au joueur). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
+	FName CameraFocusTag;
+
+	/** Faim (0–3) imposée à tous les poissons en entrant dans l'étape (-1 = inchangée). Sert à déclencher la famine du tutoriel. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (ClampMin = "-1", ClampMax = "3"))
+	int32 SetFishHungerOnEnter = -1;
+
 	/** Acteurs mis en surbrillance pendant l'étape (tag d'acteur ; vide = aucun). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
 	FName HighlightTag;
@@ -145,6 +167,10 @@ public:
 	/** Message affiché quand la jauge passe au rouge pendant le maintien. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Maintain")
 	FText MaintainResetMessage;
+
+	/** Message affiché quand l'œuf suivi meurt (retour à l'étape de ponte). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
+	FText EggLostMessage;
 
 	/** TUTO_DUREE_MSG_RESET [s] (2 [1–4]). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Maintain", meta = (ClampMin = "0.5"))

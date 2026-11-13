@@ -83,6 +83,16 @@ public:
 	/** Loupe : amène la caméra (bras de caméra du pion) juste devant l'acteur sélectionné, sans changer l'angle de vue. */
 	UFUNCTION(BlueprintCallable, Category = "Selection")
 	void FocusOnSelection();
+
+	/** Cadre la caméra sur un groupe d'acteurs, sans changer l'angle (tutoriel). N'émet pas OnFocusUsed, réservé à la loupe. */
+	void FocusOnActors(const TArray<AActor*>& Actors);
+
+	/**
+	 * Surbrillance posée par un autre système (tutoriel). Material nullptr = la retirer.
+	 * Si l'acteur est sélectionné, la surbrillance de sélection reste et c'est ce qui sera restauré à la désélection
+	 * qui est mis à jour : la sélection ne peut plus « figer » une surbrillance de tutoriel.
+	 */
+	void SetPersistentHighlight(AActor* Actor, UMaterialInterface* Material);
 	
 	UPROPERTY(EditAnywhere, Category="Interaction") 
 	float GrabScrollSpeed = 0.05f;
@@ -136,6 +146,8 @@ private:
 
 	void ApplyHighlight(AActor* Actor);
 	void RemoveHighlight();
+	/** Lance l'interpolation de la caméra vers Origin. Retourne false sans bras de caméra. */
+	bool StartFocus(const FVector& Origin, float Radius);
 	void HandleInteractableInfoChanged(AActor* Actor);
 
 	UFUNCTION()

@@ -14,6 +14,7 @@
 #include "TutorialSubsystem.generated.h"
 
 class AFish;
+class AFishEgg;
 class UMaterialInterface;
 class UMeshComponent;
 class UTutorialPanelWidget;
@@ -88,6 +89,9 @@ private:
 	void ApplyHighlight(FName Tag);
 	void RemoveHighlight();
 
+	/** Acteurs du niveau portant ce tag. */
+	TArray<AActor*> GetActorsWithTag(FName Tag) const;
+
 	// Actions d'entrée (caméra)
 	void BindInputActions(const FTutorialStep& Step);
 	void UnbindInputActions();
@@ -98,6 +102,12 @@ private:
 	void HandleFocusUsed(AActor* Actor);
 	void HandleActorReleased(AActor* Actor);
 	void HandleFishAte(AFish* Fish, AActor* Food);
+	void HandleEggLaid(AFishEgg* Egg);
+	void HandleEggHatched(AFishEgg* Egg, AFish* Fry);
+	void HandleEggDied(AFishEgg* Egg);
+
+	/** Surligne des acteurs via le contrôleur (retirés par RemoveHighlight). */
+	void HighlightActors(const TArray<AActor*>& Actors);
 
 	UFUNCTION()
 	void HandleEcosystemUpdated(const FEcosystemSnapshot& Snapshot);
@@ -126,8 +136,8 @@ private:
 	/** Nourriture lâchée par le joueur pendant l'étape (condition FishAte avec bRequirePlayerFood). */
 	TSet<TWeakObjectPtr<AActor>> PlayerReleasedFood;
 
-	/** Overlays d'origine des meshes surlignés par le tutoriel. */
-	TMap<TWeakObjectPtr<UMeshComponent>, TWeakObjectPtr<UMaterialInterface>> SavedOverlays;
+	/** Acteurs surlignés par l'étape en cours (via AMouseController::SetPersistentHighlight). */
+	TArray<TWeakObjectPtr<AActor>> HighlightedActors;
 
 	// Maintien
 	float MaintainRemaining = 0.f;
@@ -138,4 +148,10 @@ private:
 	FDelegateHandle FocusHandle;
 	FDelegateHandle ReleasedHandle;
 	FDelegateHandle FishAteHandle;
+	FDelegateHandle EggLaidHandle;
+	FDelegateHandle EggHatchedHandle;
+	FDelegateHandle EggDiedHandle;
+
+	/** Dernier acteur apparu qui intéresse le tutoriel (œuf pondu, puis alevin né). */
+	TWeakObjectPtr<AActor> LastEventActor;
 };

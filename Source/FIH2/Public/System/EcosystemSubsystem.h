@@ -137,6 +137,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Ecosystem")
 	bool IsStarvationEnabled() const { return bStarvationEnabled; }
 
+	/** Ramène le délai avant la prochaine ponte de chaque adulte à au plus MaxSeconds (tutoriel). Les conditions de ponte (faim, 2 adultes) restent valables. */
+	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
+	void ShortenReproTimers(float MaxSeconds);
+
 	/** Termine la partie depuis l'extérieur (ex. victoire du tutoriel). Sans effet si elle est déjà finie. */
 	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
 	void FinishLevel(bool bWon);
@@ -173,7 +177,7 @@ private:
 	static float NextReproCooldown(const FFishReproductionSettings& Settings);
 	void LayEgg(AFish* Parent);
 	void HatchEgg(AFishEgg* Egg);
-	void SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale);
+	AFish* SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale);
 	/** Acteur actuellement tenu par la poignée physique du joueur (nullptr sinon). */
 	const AActor* GetHeldActor() const;
 	void SetState(EEcosystemState NewState, EEcosystemEndReason Reason);

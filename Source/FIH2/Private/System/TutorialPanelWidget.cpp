@@ -49,7 +49,8 @@ void UTutorialPanelWidget::BuildDefaultTree()
 	Root->SetVisibility(ESlateVisibility::SelfHitTestInvisible); // ne bloque pas les clics sur la cuve
 	WidgetTree->RootWidget = Root;
 
-	// Panneau en haut au centre (le bas-gauche est au HUD, le bas-droite au panneau d'infos).
+	// Panneau en haut au centre : le bloc chrono / objectif du HUD est masqué pendant le tutoriel (pas d'objectif chronométré).
+	// Le bas-gauche est au HUD, le bas-droite au panneau d'infos.
 	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Panel"));
 	Panel->SetBrushColor(FLinearColor(0.02f, 0.05f, 0.08f, 0.78f));
 	Panel->SetPadding(FMargin(24.f, 14.f));
@@ -161,6 +162,11 @@ void UTutorialPanelWidget::ShowStep(const FText& Message, int32 StepIndex, int32
 	if (TimerText)
 	{
 		TimerText->SetVisibility(bShowTimer ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (SkipButton)
+	{
+		// Étape de maintien (la seule avec un compte à rebours) : plus rien à passer.
+		SkipButton->SetVisibility(bShowTimer ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	}
 	OnStepShown(StepIndex);
 }

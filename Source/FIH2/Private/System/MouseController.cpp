@@ -226,16 +226,44 @@ void AMouseController::RemoveHighlight()
 
 void AMouseController::FocusOnSelection()
 {
-	APawn* ViewPawn = GetPawn();
-	USpringArmComponent* Arm = ViewPawn ? ViewPawn->FindComponentByClass<USpringArmComponent>() : nullptr;
-	if (!SelectedActor || !Arm)
+	if (!SelectedActor)
 	{
 		return;
 	}
-
 	FVector Origin, Extent;
 	SelectedActor->GetActorBounds(true, Origin, Extent);
-	const float Radius = FMath::Max(Extent.Size(), 1.f);
+	if (StartFocus(Origin, FMath::Max(Extent.Size(), 1.f)))
+	{
+		FGameplayEvents::OnFocusUsed().Broadcast(SelectedActor);
+	}
+}
+
+void AMouseController::FocusOnActors(const TArray<AActor*>& Actors)
+{
+	FBox Bounds(ForceInit);
+	for (const AActor* Actor : Actors)
+	{
+		if (Actor)
+		{
+			FVector Origin, Extent;
+			Actor->GetActorBounds(true, Origin, Extent);
+			Bounds += FBox(Origin - Extent, Origin + Extent);
+		}
+	}
+	if (Bounds.IsValid)
+	{
+		StartFocus(Bounds.GetCenter(), FMath::Max(Bounds.GetExtent().Size(), 1.f));
+	}
+}
+
+bool AMouseController::StartFocus(const FVector& Origin, float Radius)
+{
+	APawn* ViewPawn = GetPawn();
+	USpringArmComponent* Arm = ViewPawn ? ViewPawn->FindComponentByClass<USpringArmComponent>() : nullptr;
+	if (!Arm)
+	{
+		return false;
+	}
 
 	FocusArm = Arm;
 	FocusStartLocation = Arm->GetComponentLocation();
@@ -243,11 +271,40 @@ void AMouseController::FocusOnSelection()
 	FocusStartArmLength = Arm->TargetArmLength;
 	FocusEndArmLength = FMath::Max(FocusMinArmLength, Radius * FocusDistanceFactor);
 	FocusElapsed = 0.f;
-	FGameplayEvents::OnFocusUsed().Broadcast(SelectedActor);
 
 	if (FocusDuration <= KINDA_SMALL_NUMBER)
 	{
 		UpdateFocus(0.f);
+	}
+	return true;
+}
+
+void AMouseController::SetPersistentHighlight(AActor* Actor, UMaterialInterface* Material)
+{
+	if (!Actor)
+	{
+		return;
+	}
+	TArray<UMeshComponent*> Meshes;
+	Actor->GetComponents<UMeshComponent>(Meshes);
+	for (UMeshComponent* MeshComp : Meshes)
+	{
+		if (!MeshComp)
+		{
+			continue;
+		}
+		if (Actor == SelectedActor)
+		{
+			// La surbrillance de sélection reste ; on change ce qui sera remis à la désélection.
+			if (TWeakObjectPtr<UMaterialInterface>* Saved = SavedOverlays.Find(MeshComp))
+			{
+				*Saved = Material;
+			}
+		}
+		else if (!Material || MeshComp->IsVisible())
+		{
+			MeshComp->SetOverlayMaterial(Material);
+		}
 	}
 }
 

@@ -11,6 +11,7 @@
 #include "Inanimate/Kelp.h"
 #include "PhysicsEngine/PhysicsHandleComponent.h"
 #include "Stats/Stats.h"
+#include "System/GameplayEvents.h"
 #include "System/LevelConfig.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogEcosystem, Log, All);
@@ -130,6 +131,17 @@ void UEcosystemSubsystem::SetDefeatEnabled(bool bEnabled)
 void UEcosystemSubsystem::SetStarvationEnabled(bool bEnabled)
 {
 	bStarvationEnabled = bEnabled;
+}
+
+void UEcosystemSubsystem::ShortenReproTimers(float MaxSeconds)
+{
+	for (auto& Pair : Fish)
+	{
+		if (Pair.Value.bAdult)
+		{
+			Pair.Value.ReproTimer = FMath::Min(Pair.Value.ReproTimer, FMath::Max(0.f, MaxSeconds));
+		}
+	}
 }
 
 void UEcosystemSubsystem::FinishLevel(bool bWon)
@@ -389,6 +401,7 @@ void UEcosystemSubsystem::Step(float Dt)
 		for (AFishEgg* Egg : ToKill)
 		{
 			Eggs.RemoveSingleSwap(TWeakObjectPtr<AFishEgg>(Egg));
+			FGameplayEvents::OnEggDied().Broadcast(Egg);
 			Egg->Destroy();
 			++EggsLost;
 		}
@@ -570,6 +583,7 @@ void UEcosystemSubsystem::LayEgg(AFish* Parent)
 	Egg->SetActorScale3D(FVector(R.EggScale));
 	Egg->InitEgg(Parent->GetClass(), AdultScale, R.EggIncubationTime, R.bEggDiesInRedPollution);
 	TrackActor(Egg); // sans effet si HandleActorSpawned l'a déjà enregistré
+	FGameplayEvents::OnEggLaid().Broadcast(Egg);
 }
 
 void UEcosystemSubsystem::HatchEgg(AFishEgg* Egg)
@@ -601,18 +615,16 @@ void UEcosystemSubsystem::HatchEgg(AFishEgg* Egg)
 	Eggs.RemoveSingleSwap(TWeakObjectPtr<AFishEgg>(Egg));
 	Egg->Destroy();
 
-	if (FishClass)
-	{
-		SpawnFry(FishClass, Location, FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), AdultScale);
-	}
+	AFish* Fry = FishClass ? SpawnFry(FishClass, Location, FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f), AdultScale) : nullptr;
+	FGameplayEvents::OnEggHatched().Broadcast(Egg, Fry);
 }
 
-void UEcosystemSubsystem::SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale)
+AFish* UEcosystemSubsystem::SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale)
 {
 	UWorld* World = GetWorld();
 	if (!FishClass || !World || !Config)
 	{
-		return;
+		return nullptr;
 	}
 
 	FActorSpawnParameters Params;
@@ -626,7 +638,7 @@ void UEcosystemSubsystem::SpawnFry(TSubclassOf<AFish> FishClass, const FVector& 
 
 	if (!Newborn)
 	{
-		return;
+		return nullptr;
 	}
 
 	Newborn->SetActorScale3D(AdultScale * Newborn->Reproduction.FryStartScale);
@@ -636,6 +648,7 @@ void UEcosystemSubsystem::SpawnFry(TSubclassOf<AFish> FishClass, const FVector& 
 	{
 		Newborn->SpawnDefaultController(); // garantit l'IA même si le BP n'est pas en AutoPossess à l'apparition
 	}
+	return Newborn;
 }
 
 void UEcosystemSubsystem::SetState(EEcosystemState NewState, EEcosystemEndReason Reason)
