@@ -34,8 +34,12 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Egg")
 	float IncubationRemaining = 0.f;
 
+	/** Copie de la règle de l'espèce : l'œuf meurt si la pollution est en zone rouge. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Egg")
+	bool bDiesInRedPollution = true;
+
 	/** Initialise l'œuf juste après la ponte. */
-	void InitEgg(TSubclassOf<AFish> InFishClass, const FVector& InAdultScale, float InIncubationDuration);
+	void InitEgg(TSubclassOf<AFish> InFishClass, const FVector& InAdultScale, float InIncubationDuration, bool bInDiesInRedPollution = true);
 
 	/** 0 à la ponte, 1 à l'éclosion. */
 	UFUNCTION(BlueprintPure, Category = "Egg")

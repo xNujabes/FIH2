@@ -24,8 +24,9 @@ AFishEgg::AFishEgg()
 	Mesh->SetAngularDamping(2.f);
 }
 
-void AFishEgg::InitEgg(TSubclassOf<AFish> InFishClass, const FVector& InAdultScale, float InIncubationDuration)
+void AFishEgg::InitEgg(TSubclassOf<AFish> InFishClass, const FVector& InAdultScale, float InIncubationDuration, bool bInDiesInRedPollution)
 {
+	bDiesInRedPollution = bInDiesInRedPollution;
 	FishClass = InFishClass;
 	AdultScale = InAdultScale;
 	IncubationDuration = FMath::Max(0.1f, InIncubationDuration);

@@ -9,7 +9,6 @@
 #include "Engine/DataAsset.h"
 #include "LevelConfig.generated.h"
 
-class AFishEgg;
 
 UCLASS(BlueprintType)
 class FIH2_API ULevelConfig : public UDataAsset
@@ -128,62 +127,14 @@ public:
 	int32 StarvingHungerMax = 0;
 
 	// ---------------------------------------------------------------- Reproduction (D-06)
-	/** Désactive la reproduction (le niveau n'est alors pas gagnable avec les seuls poissons de départ). */
+	/** Désactive la reproduction dans ce niveau. Les réglages de ponte, d'œuf et d'alevin sont propres à chaque
+	 *  espèce : voir AFish::Reproduction dans le Blueprint du poisson. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction")
 	bool bReproductionEnabled = true;
-
-	/** COOLDOWN_REPRO_BASE [s] : délai moyen entre deux pontes pour un adulte nourri (75 → 100 avec les œufs et l'objectif à 5). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "5"))
-	float ReproCooldown = 100.f;
-
-	/** Variation aléatoire du cooldown (0,2 = ±20 %). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "0", ClampMax = "0.9"))
-	float ReproCooldownJitter = 0.2f;
-
-	/** SEUIL_SATIETE_REPRO : Hunger minimal (0–3) pour qu'un adulte se reproduise. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "0", ClampMax = "3"))
-	int32 ReproMinHunger = 2;
-
-	/** MATURATION_ALEVIN [s] */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "1"))
-	float MaturationTime = 30.f;
-
-	/** Échelle d'un alevin à la naissance, relative à celle du parent (grandit jusqu'à 1). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "0.1", ClampMax = "1"))
-	float FryStartScale = 0.5f;
-
-	/** Hunger (0–3) d'un alevin à la naissance. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "0", ClampMax = "3"))
-	int32 FryStartHunger = 2;
-
-	/** Hauteur [unités UE] au-dessus de l'œuf où apparaît l'alevin à l'éclosion. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "0"))
-	float FrySpawnDistance = 60.f;
 
 	/** MAX_POISSONS_TOTAL : garde-fou de performance (adultes + alevins + œufs). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "2"))
 	int32 MaxFishTotal = 40;
-
-	// ---------------------------------------------------------------- Œufs (D-09, D-10)
-	/** Classe d'œuf pondue (laisser vide = AFishEgg, sphère provisoire ; mettre BP_FishEgg pour le rendu final). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs")
-	TSubclassOf<AFishEgg> EggClass;
-
-	/** INCUBATION_OEUF [s] */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs", meta = (ClampMin = "1"))
-	float EggIncubationTime = 20.f;
-
-	/** D-10 : un œuf meurt si le stress de pollution est en zone rouge (>= SEUIL_ROUGE_VARIABLE). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs")
-	bool bEggsDieInRedPollution = true;
-
-	/** Échelle monde de l'œuf (la sphère de base fait 100 unités : 0,8 = 80 unités ; un poisson à l'échelle 2 fait environ 460 unités). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs", meta = (ClampMin = "0.01"))
-	float EggScale = 0.8f;
-
-	/** Distance [unités UE] sous le parent où l'œuf est pondu (il tombe ensuite). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs", meta = (ClampMin = "0"))
-	float EggDropOffset = 60.f;
 
 	// ---------------------------------------------------------------- Debug
 	/** Affiche l'état de l'écosystème en texte à l'écran (retiré des builds Shipping). */

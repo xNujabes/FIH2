@@ -253,12 +253,13 @@ void AFood::DetachFruit()
 	GetWorldTimerManager().ClearTimer(GrowthTimerHandle);
 	GetWorldTimerManager().ClearTimer(FullyGrownTimerHandle);
 
+	// Détacher AVANT de retirer l'échelle absolue : sinon l'échelle relative est réinterprétée dans l'espace du kelp
+	// (échelle non uniforme, ex. 1 x 1 x 15) et, si le kelp est penché, la transformation du fruit se cisaille.
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	if (PhysicsProxy)
 	{
 		PhysicsProxy->SetAbsolute(false, false, false);
 	}
-
-	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	SetActorScale3D(MatureGrowthScale);
 
 	if (PhysicsProxy)
@@ -401,7 +402,12 @@ void AFood::TriggerBreak_Implementation(AActor* BreakInstigator, FVector HitLoca
 {
 	if (GeometryCollection)
 	{
+		// Échelle monde attendue des fragments (échelle du fruit x échelle relative du GC), réappliquée après le
+		// détachement pour qu'une transformation déformée par un parent non uniforme ne passe pas aux morceaux.
+		const FVector FruitScale = (CurrentGrowthState == EFoodGrowthState::Growing) ? GetActorScale3D() : MatureGrowthScale;
+		const FVector FragmentScale = FruitScale * GeometryCollection->GetRelativeScale3D();
 		GeometryCollection->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		GeometryCollection->SetWorldScale3D(FragmentScale);
 		GeometryCollection->SetVisibility(true);
 		GeometryCollection->SetCollisionProfileName(TEXT("Destructible"));
 		GeometryCollection->SetSimulatePhysics(true);

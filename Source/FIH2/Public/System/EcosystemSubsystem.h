@@ -12,6 +12,7 @@
 #include "EcosystemSubsystem.generated.h"
 
 class AFish;
+struct FFishReproductionSettings;
 class AFishEgg;
 class AKelp;
 class AFood;
@@ -147,7 +148,7 @@ private:
 
 	void Step(float Dt);
 	void UpdateFryScales();
-	float NextReproCooldown() const;
+	static float NextReproCooldown(const FFishReproductionSettings& Settings);
 	void LayEgg(AFish* Parent);
 	void HatchEgg(AFishEgg* Egg);
 	void SpawnFry(TSubclassOf<AFish> FishClass, const FVector& Location, const FRotator& Rotation, const FVector& AdultScale);

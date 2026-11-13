@@ -44,4 +44,12 @@ protected:
 	/** Reject targets that have an obstacle on the straight line from the fish (avoids aiming behind a wall). */
 	UPROPERTY(EditAnywhere, Category = "Search")
 	bool bRequireClearPath = true;
+
+	/** Hauteur minimale [cm] de la cible au-dessus du sol (fond WorldStatic) : rejette les points sous le relief. */
+	UPROPERTY(EditAnywhere, Category = "Search", meta = (ClampMin = "0.0"))
+	float MinHeightAboveGround = 150.0f;
+
+	/** Demi-hauteur [cm] du tracé vertical qui cherche le sol au-dessus et au-dessous de la cible. */
+	UPROPERTY(EditAnywhere, Category = "Search", meta = (ClampMin = "0.0"))
+	float GroundTraceHalfHeight = 20000.0f;
 };

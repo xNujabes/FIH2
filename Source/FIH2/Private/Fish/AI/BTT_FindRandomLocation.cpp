@@ -31,6 +31,34 @@ namespace
 		return false;
 	}
 
+	/**
+	 * Hauteur du sol à la verticale de Location : premier obstacle WorldStatic rencontré en descendant depuis
+	 * Location + HalfHeight. Le fond de la cuve est une surface en triangles : sous le relief, l'espace est « vide »
+	 * pour le moteur, donc un point sous le sable passe le test d'overlap. Les volumes qui contiennent le point
+	 * (boîte d'eau...) sont ignorés.
+	 */
+	bool FindGroundZ(UWorld* World, const FVector& Location, float HalfHeight,
+	                 const FCollisionQueryParams& QueryParams, float& OutGroundZ)
+	{
+		TArray<FHitResult> Hits;
+		const FCollisionObjectQueryParams GroundTypes(ECC_WorldStatic);
+		World->LineTraceMultiByObjectType(Hits, Location + FVector(0.f, 0.f, HalfHeight),
+		                                  Location - FVector(0.f, 0.f, HalfHeight), GroundTypes, QueryParams);
+
+		const FCollisionShape Probe = FCollisionShape::MakeSphere(1.0f);
+		for (const FHitResult& Hit : Hits) // triés du plus proche au plus loin
+		{
+			const UPrimitiveComponent* Comp = Hit.GetComponent();
+			if (Hit.bStartPenetrating || !Comp || Comp->OverlapComponent(Location, FQuat::Identity, Probe))
+			{
+				continue;
+			}
+			OutGroundZ = Hit.ImpactPoint.Z;
+			return true;
+		}
+		return false;
+	}
+
 	/** Nearest real obstacle on the path (start overlaps ignored, same idea as above). */
 	bool IsPathBlocked(UWorld* World, const FVector& Start, const FVector& End,
 	                   const FCollisionObjectQueryParams& ObjectParams, const FCollisionShape& Shape,
@@ -106,6 +134,14 @@ EBTNodeResult::Type UBTT_FindRandomLocation::ExecuteTask(UBehaviorTreeComponent&
 			Candidate = Bounds.GetClosestPointTo(Candidate);
 		}
 
+		// 0. Pas de cible sous le relief (ni collée au sol).
+		float GroundZ = 0.f;
+		if (World && FindGroundZ(World, Candidate, GroundTraceHalfHeight, QueryParams, GroundZ)
+			&& Candidate.Z < GroundZ + MinHeightAboveGround)
+		{
+			continue;
+		}
+
 		// 1. The point itself must not be inside (or touching) an obstacle.
 		if (World && IsBlockedAt(World, Candidate, Origin, ObjectParams, ClearanceShape, QueryParams))
 		{
@@ -137,6 +173,16 @@ EBTNodeResult::Type UBTT_FindRandomLocation::ExecuteTask(UBehaviorTreeComponent&
 		if (Bounds.IsValid)
 		{
 			RandomPoint = Bounds.GetClosestPointTo(RandomPoint);
+		}
+		// Même sans vérification d'obstacle, on ne vise jamais sous le relief.
+		float GroundZ = 0.f;
+		if (World && FindGroundZ(World, RandomPoint, GroundTraceHalfHeight, QueryParams, GroundZ))
+		{
+			RandomPoint.Z = FMath::Max(RandomPoint.Z, GroundZ + MinHeightAboveGround);
+			if (Bounds.IsValid)
+			{
+				RandomPoint = Bounds.GetClosestPointTo(RandomPoint);
+			}
 		}
 		UE_LOG(LogTemp, Verbose, TEXT("FindRandomLocation: no free point after %d attempts, unchecked fallback"), MaxAttempts);
 	}
