@@ -54,6 +54,10 @@ struct FEcosystemSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") float ElapsedTime = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") float TimeRemaining = 0.f;
+	/** Chrono du HUD : temps restant si le niveau a un objectif chronométré (ULevelConfig::bUseTimedObjective), sinon temps écoulé. */
+	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") float ChronoTime = 0.f;
+	/** true : ChronoTime décompte ; false : il compte le temps écoulé (tutoriel). */
+	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") bool bChronoCountsDown = true;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 AdultFish = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Ecosystem") int32 FryFish = 0;
@@ -119,6 +123,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
 	void ResetEcosystem();
 
+	/** Active / désactive toutes les défaites (jauge, extinction, objectif manqué). Le tutoriel les coupe avant son étape finale. */
+	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
+	void SetDefeatEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Ecosystem")
+	bool IsDefeatEnabled() const { return bDefeatEnabled; }
+
+	/** Active / désactive la mort par la faim (lue par BP_Fish via AFish::CanStarveToDeath). */
+	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
+	void SetStarvationEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Ecosystem")
+	bool IsStarvationEnabled() const { return bStarvationEnabled; }
+
+	/** Termine la partie depuis l'extérieur (ex. victoire du tutoriel). Sans effet si elle est déjà finie. */
+	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
+	void FinishLevel(bool bWon);
+
 	/** Émis une seule fois quand la partie passe à Won ou Lost. */
 	UPROPERTY(BlueprintAssignable, Category = "Ecosystem")
 	FOnEcosystemStateChanged OnStateChanged;
@@ -183,6 +205,9 @@ private:
 	float Accumulator = 0.f;
 	int32 EggsLost = 0;
 	bool bLevelStarted = false;
+	/** Interrupteurs d'exécution (le tutoriel les coupe), indépendants de ResetEcosystem. */
+	bool bDefeatEnabled = true;
+	bool bStarvationEnabled = true;
 
 	// Naissance en cours : la découverte d'acteur (HandleActorSpawned) doit savoir que c'est un alevin.
 	bool bSpawningFry = false;

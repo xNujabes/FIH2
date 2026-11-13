@@ -9,6 +9,8 @@
 #include "Engine/DataAsset.h"
 #include "LevelConfig.generated.h"
 
+class UTutorialSequence;
+
 
 UCLASS(BlueprintType)
 class FIH2_API ULevelConfig : public UDataAsset
@@ -24,6 +26,14 @@ public:
 	/** DUREE_NIVEAU [s] : la victoire est évaluée à cet instant (option B). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mission", meta = (ClampMin = "10"))
 	float LevelDuration = 300.f;
+
+	/** Objectif chronométré : victoire / défaite évaluées à DUREE_NIVEAU. Désactivé pour le tutoriel (sa dernière étape décide de la victoire) ; le chrono du HUD compte alors le temps écoulé. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mission")
+	bool bUseTimedObjective = true;
+
+	/** Tutoriel guidé du niveau (vide = pas de tutoriel). Voir UTutorialSubsystem. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mission")
+	TObjectPtr<UTutorialSequence> TutorialSequence;
 
 	/** DELAI_EXTINCTION [s] : durée pendant laquelle il peut manquer des adultes (< 2, sans alevin ni œuf) avant la défaite. Laisse le temps de reposer un poisson. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mission", meta = (ClampMin = "0"))

@@ -10,6 +10,7 @@
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
 #include "System/FIH2Log.h"
+#include "System/GameplayEvents.h"
 
 AFood::AFood()
 {
@@ -371,6 +372,12 @@ void AFood::TriggerEat_Implementation(AActor* EatInstigator, FVector HitLocation
 	}
 
 	AFish* FishInstigator = Cast<AFish>(EatInstigator);
+	if (FishInstigator && FishInstigator->IsSated())
+	{
+		// Q-02 (option A) : un poisson rassasié ne mange pas. Le fruit reste dans le bac (et pourrira s'il n'est pas mangé).
+		return;
+	}
+
 	if (FishInstigator)
 	{
 		bIsEaten = true;
@@ -395,6 +402,7 @@ void AFood::TriggerEat_Implementation(AActor* EatInstigator, FVector HitLocation
 		}
 
 		FishInstigator->AddHunger(FMath::RoundToInt(HungerRestoreAmount));
+		FGameplayEvents::OnFishAte().Broadcast(FishInstigator, this);
 		Mesh->SetVisibility(false);
 		PhysicsProxy->SetSimulatePhysics(false);
 		PhysicsProxy->SetCollisionEnabled(ECollisionEnabled::NoCollision);

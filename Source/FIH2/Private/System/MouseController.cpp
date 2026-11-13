@@ -13,6 +13,7 @@
 #include "Components/MeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "System/Interactable.h"
+#include "System/GameplayEvents.h"
 
 
 AMouseController::AMouseController()
@@ -165,6 +166,7 @@ void AMouseController::SelectActor(AActor* Actor)
 	}
 
 	OnSelectionChanged.Broadcast(SelectedActor);
+	FGameplayEvents::OnActorSelected().Broadcast(SelectedActor);
 }
 
 void AMouseController::ClearSelection()
@@ -241,6 +243,7 @@ void AMouseController::FocusOnSelection()
 	FocusStartArmLength = Arm->TargetArmLength;
 	FocusEndArmLength = FMath::Max(FocusMinArmLength, Radius * FocusDistanceFactor);
 	FocusElapsed = 0.f;
+	FGameplayEvents::OnFocusUsed().Broadcast(SelectedActor);
 
 	if (FocusDuration <= KINDA_SMALL_NUMBER)
 	{
@@ -311,6 +314,11 @@ void AMouseController::OnMouseRelease()
 	if (AFish* Fish = Cast<AFish>(Released))
 	{
 		Fish->SetHeldByPlayer(false);
+	}
+
+	if (Released)
+	{
+		FGameplayEvents::OnActorReleased().Broadcast(Released);
 	}
 	
 }

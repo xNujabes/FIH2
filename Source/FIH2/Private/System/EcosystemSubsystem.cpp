@@ -117,6 +117,31 @@ void UEcosystemSubsystem::ResetEcosystem()
 	bLevelStarted = false;
 }
 
+void UEcosystemSubsystem::SetDefeatEnabled(bool bEnabled)
+{
+	bDefeatEnabled = bEnabled;
+	if (!bEnabled)
+	{
+		DefeatTimer = 0.f;
+		ExtinctionTimer = 0.f;
+	}
+}
+
+void UEcosystemSubsystem::SetStarvationEnabled(bool bEnabled)
+{
+	bStarvationEnabled = bEnabled;
+}
+
+void UEcosystemSubsystem::FinishLevel(bool bWon)
+{
+	if (State != EEcosystemState::Playing)
+	{
+		return;
+	}
+	SetState(bWon ? EEcosystemState::Won : EEcosystemState::Lost,
+		bWon ? EEcosystemEndReason::None : EEcosystemEndReason::ObjectiveMissed);
+}
+
 // ------------------------------------------------------------------ Suivi des acteurs
 
 void UEcosystemSubsystem::TrackActor(AActor* Actor)
@@ -421,26 +446,35 @@ void UEcosystemSubsystem::Step(float Dt)
 	if (State == EEcosystemState::Playing)
 	{
 		Elapsed += Dt;
-		DefeatTimer = (Gauge >= C.DefeatGaugeThreshold)
-			? DefeatTimer + Dt
-			: FMath::Max(0.f, DefeatTimer - C.DefeatTimerDecay * Dt);
-		ExtinctionTimer = (Adults < 2 && Fry == 0 && EggCount == 0) ? ExtinctionTimer + Dt : 0.f; // D-11
+		if (bDefeatEnabled)
+		{
+			DefeatTimer = (Gauge >= C.DefeatGaugeThreshold)
+				? DefeatTimer + Dt
+				: FMath::Max(0.f, DefeatTimer - C.DefeatTimerDecay * Dt);
+			ExtinctionTimer = (Adults < 2 && Fry == 0 && EggCount == 0) ? ExtinctionTimer + Dt : 0.f; // D-11
+		}
+		else
+		{
+			// Défaite désactivée (tutoriel) : timers à zéro, donc pas d'alerte de défaite au HUD.
+			DefeatTimer = 0.f;
+			ExtinctionTimer = 0.f;
+		}
 
-		if (DefeatTimer >= C.DefeatDuration)
+		if (bDefeatEnabled && DefeatTimer >= C.DefeatDuration)
 		{
 			SetState(EEcosystemState::Lost, EEcosystemEndReason::GaugeTooHigh);
 		}
-		else if (ExtinctionTimer >= C.ExtinctionGraceTime)
+		else if (bDefeatEnabled && ExtinctionTimer >= C.ExtinctionGraceTime)
 		{
 			SetState(EEcosystemState::Lost, EEcosystemEndReason::Extinction);
 		}
-		else if (Elapsed >= C.LevelDuration)
+		else if (C.bUseTimedObjective && Elapsed >= C.LevelDuration)
 		{
 			if (Adults >= C.ObjectiveAdultFish)
 			{
 				SetState(EEcosystemState::Won, EEcosystemEndReason::None);
 			}
-			else
+			else if (bDefeatEnabled)
 			{
 				SetState(EEcosystemState::Lost, EEcosystemEndReason::ObjectiveMissed);
 			}
@@ -452,6 +486,8 @@ void UEcosystemSubsystem::Step(float Dt)
 	Snapshot.EndReason = EndReason;
 	Snapshot.ElapsedTime = Elapsed;
 	Snapshot.TimeRemaining = FMath::Max(0.f, C.LevelDuration - Elapsed);
+	Snapshot.bChronoCountsDown = C.bUseTimedObjective;
+	Snapshot.ChronoTime = C.bUseTimedObjective ? Snapshot.TimeRemaining : Elapsed;
 	Snapshot.AdultFish = Adults;
 	Snapshot.FryFish = Fry;
 	Snapshot.Eggs = EggCount;

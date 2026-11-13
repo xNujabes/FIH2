@@ -5,6 +5,7 @@
 
 #include "Components/SphereComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "System/EcosystemSubsystem.h"
 
 
 // Sets default values
@@ -71,6 +72,12 @@ void AFish::SetHeldByPlayer(bool bHeld)
 		Mesh->SetSimulatePhysics(bHeld);
 		Mesh->SetEnableGravity(false);
 	}
+}
+
+bool AFish::CanStarveToDeath() const
+{
+	const UEcosystemSubsystem* Eco = UEcosystemSubsystem::Get(this);
+	return !Eco || Eco->IsStarvationEnabled();
 }
 
 bool AFish::IsStimulated() const

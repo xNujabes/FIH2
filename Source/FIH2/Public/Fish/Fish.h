@@ -119,6 +119,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "Fish|Status")
 	EFoodPreferences FoodPreferences = EFoodPreferences::Herbivore;
 
+	/**
+	 * SEUIL_SATIETE (0–3) : à partir de cette faim, le poisson est rassasié et ne mange plus (Q-02, option A).
+	 * La nourriture qu'il ignore finit par pourrir et polluer. Garder BT_Fish cohérent (décorateur « Hunger < 3 »).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Fish|Status", meta = (ClampMin = "1", ClampMax = "3"))
+	int32 SatietyHunger = 3;
+
 	/** Croissance de l'alevin : 0 à la naissance, 1 = adulte (piloté par UEcosystemSubsystem, comme le kelp). */
 	UPROPERTY(BlueprintReadOnly, VisibleInstanceOnly, Category = "Fish|Growth")
 	float GrowthProgress = 1.f;
@@ -149,6 +156,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Fish|Status")
 	bool IsStimulated() const;
+
+	/**
+	 * Le poisson peut-il mourir de faim maintenant ? Faux pendant le tutoriel guidé (UEcosystemSubsystem::IsStarvationEnabled).
+	 * BP_Fish le teste avant de détruire un poisson arrivé à 0 de faim.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Fish|Status")
+	bool CanStarveToDeath() const;
+
+	/** Rassasié : ne mange plus tant que sa faim n'est pas redescendue sous SatietyHunger. */
+	UFUNCTION(BlueprintPure, Category = "Fish|Status")
+	bool IsSated() const { return Hunger >= SatietyHunger; }
 
 	/**
 	 * A fish is kinematic and moves ONLY through its UFishSteeringMovement.

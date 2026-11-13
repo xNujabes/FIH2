@@ -1,0 +1,1059 @@
+diff --git a/Source/FIH2/FIH2.Build.cs b/Source/FIH2/FIH2.Build.cs
+index 35996e0..d104d3f 100644
+--- a/Source/FIH2/FIH2.Build.cs
++++ b/Source/FIH2/FIH2.Build.cs
+@@ -8,7 +8,7 @@ public class FIH2 : ModuleRules
+ 	{
+ 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+ 	
+-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "GameplayTasks", "GeometryCollectionEngine", "Landscape" });
++		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "GameplayTasks", "GeometryCollectionEngine", "Landscape", "UMG", "Slate", "SlateCore" });
+ 
+ 		PrivateDependencyModuleNames.AddRange(new string[] {  });
+ 
+diff --git a/Source/FIH2/Private/System/EcosystemSubsystem.cpp b/Source/FIH2/Private/System/EcosystemSubsystem.cpp
+index 0256959..dfb76f3 100644
+--- a/Source/FIH2/Private/System/EcosystemSubsystem.cpp
++++ b/Source/FIH2/Private/System/EcosystemSubsystem.cpp
+@@ -72,6 +72,34 @@ void UEcosystemSubsystem::EnsureConfig()
+ 	}
+ }
+ 
++ULevelConfig* UEcosystemSubsystem::EnsureLevelConfig()
++{
++	EnsureConfig();
++	return Config;
++}
++
++void UEcosystemSubsystem::SetDefeatEnabled(bool bEnabled)
++{
++	if (bEnabled && !bDefeatEnabled)
++	{
++		// Repart de zéro : rien de ce qui s'est passé pendant la phase guidée ne compte.
++		DefeatTimer = 0.f;
++		ExtinctionTimer = 0.f;
++	}
++	bDefeatEnabled = bEnabled;
++}
++
++void UEcosystemSubsystem::FinishLevel(bool bWon)
++{
++	if (State != EEcosystemState::Playing)
++	{
++		return;
++	}
++	SetState(bWon ? EEcosystemState::Won : EEcosystemState::Lost, EEcosystemEndReason::None);
++	Snapshot.State = State;
++	Snapshot.EndReason = EndReason;
++}
++
+ void UEcosystemSubsystem::SetLevelConfig(ULevelConfig* NewConfig)
+ {
+ 	Config = NewConfig;
+@@ -421,10 +449,18 @@ void UEcosystemSubsystem::Step(float Dt)
+ 	if (State == EEcosystemState::Playing)
+ 	{
+ 		Elapsed += Dt;
+-		DefeatTimer = (Gauge >= C.DefeatGaugeThreshold)
+-			? DefeatTimer + Dt
+-			: FMath::Max(0.f, DefeatTimer - C.DefeatTimerDecay * Dt);
+-		ExtinctionTimer = (Adults < 2 && Fry == 0 && EggCount == 0) ? ExtinctionTimer + Dt : 0.f; // D-11
++		if (bDefeatEnabled)
++		{
++			DefeatTimer = (Gauge >= C.DefeatGaugeThreshold)
++				? DefeatTimer + Dt
++				: FMath::Max(0.f, DefeatTimer - C.DefeatTimerDecay * Dt);
++			ExtinctionTimer = (Adults < 2 && Fry == 0 && EggCount == 0) ? ExtinctionTimer + Dt : 0.f; // D-11
++		}
++		else
++		{
++			DefeatTimer = 0.f;
++			ExtinctionTimer = 0.f;
++		}
+ 
+ 		if (DefeatTimer >= C.DefeatDuration)
+ 		{
+@@ -434,7 +470,7 @@ void UEcosystemSubsystem::Step(float Dt)
+ 		{
+ 			SetState(EEcosystemState::Lost, EEcosystemEndReason::Extinction);
+ 		}
+-		else if (Elapsed >= C.LevelDuration)
++		else if (bTimedObjectiveEnabled && Elapsed >= C.LevelDuration)
+ 		{
+ 			if (Adults >= C.ObjectiveAdultFish)
+ 			{
+diff --git a/Source/FIH2/Private/System/LevelConfig.cpp b/Source/FIH2/Private/System/LevelConfig.cpp
+new file mode 100644
+index 0000000..9efb3cf
+--- /dev/null
++++ b/Source/FIH2/Private/System/LevelConfig.cpp
+@@ -0,0 +1,65 @@
++#include "System/LevelConfig.h"
++
++#define LOCTEXT_NAMESPACE "FIH2Tutorial"
++
++namespace
++{
++	FTutorialStep MakeStep(ETutorialStepType Type, const FText& Title, const FText& Message, float Value,
++		float MinDuration = 3.f, float MaxDuration = 0.f)
++	{
++		FTutorialStep Step;
++		Step.Type = Type;
++		Step.Title = Title;
++		Step.Message = Message;
++		Step.Value = Value;
++		Step.MinDuration = MinDuration;
++		Step.MaxDuration = MaxDuration;
++		return Step;
++	}
++}
++
++ULevelConfig::ULevelConfig()
++{
++	// Tutoriel du niveau 1 (8 étapes). Textes et valeurs modifiables dans le Data Asset ; les touches exactes
++	// dépendent de IMC_Sandbox, à préciser dans les messages si besoin.
++	TutorialSteps = {
++		// 1-3 : prise en main des contrôles
++		MakeStep(ETutorialStepType::MoveCamera,
++			LOCTEXT("S1Title", "Bienvenue dans ta cuve"),
++			LOCTEXT("S1Msg", "Déplace, tourne ou zoome la caméra pour faire le tour de la cuve."),
++			/* TUTO_DISTANCE_CAMERA [cm] */ 600.f),
++		MakeStep(ETutorialStepType::SelectFish,
++			LOCTEXT("S2Title", "Inspecter"),
++			LOCTEXT("S2Msg", "Clique sur un poisson : son panneau d'infos s'ouvre en bas à droite.\nLa loupe y place la caméra devant lui."),
++			0.f),
++		MakeStep(ETutorialStepType::DragObject,
++			LOCTEXT("S3Title", "Attraper et déplacer"),
++			LOCTEXT("S3Msg", "Maintiens le clic sur un poisson, une pierre ou un kelp pour l'attraper, déplace-le, puis relâche (ou lance-le)."),
++			/* TUTO_DUREE_SAISIE [s] */ 1.f),
++		// 4 : observation des poissons
++		MakeStep(ETutorialStepType::Observe,
++			LOCTEXT("S4Title", "Observer"),
++			LOCTEXT("S4Msg", "Tes poissons nagent et cherchent les fruits mûrs des kelps.\nBien nourris, ils pondent des œufs qui deviennent des alevins."),
++			/* TUTO_DUREE_OBSERVATION [s] */ 15.f),
++		// 5-7 : les jauges
++		MakeStep(ETutorialStepType::WaitHungerRising,
++			LOCTEXT("S5Title", "Les jauges"),
++			LOCTEXT("S5Msg", "En bas à gauche : pollution, oxygène et faim. Ensemble, elles forment la jauge de dérèglement.\nRegarde la faim : elle monte."),
++			/* TUTO_STRESS_FAIM [0-100] */ 40.f, 5.f, /* si les poissons se nourrissent seuls */ 60.f),
++		MakeStep(ETutorialStepType::FeedFish,
++			LOCTEXT("S6Title", "Nourrir"),
++			LOCTEXT("S6Msg", "Un poisson a faim ! Attrape un fruit de kelp mûr et lâche-le près de lui.\nUn poisson rassasié ne mange pas : la nourriture en trop pourrit et pollue."),
++			0.f, 3.f, /* pas de fruit mûr disponible */ 90.f),
++		MakeStep(ETutorialStepType::GatherKelps,
++			LOCTEXT("S7Title", "Rapprocher les kelps"),
++			LOCTEXT("S7Msg", "Deux kelps sont trop loin : leurs fruits pourrissent sans être mangés.\nAttrape-les et rapproche-les des autres pour que les poissons se nourrissent seuls et que la pollution baisse."),
++			/* TUTO_RAYON_KELPS [cm] */ 3000.f),
++		// 8 : maintien final (défaite réactivée)
++		MakeStep(ETutorialStepType::FinalHold,
++			LOCTEXT("S8Title", "Dernière épreuve"),
++			LOCTEXT("S8Msg", "Garde la jauge de dérèglement hors du rouge pendant 1 minute.\nAttention : à partir de maintenant, la partie peut être perdue."),
++			/* TUTO_DUREE_MAINTIEN [s] */ 60.f, 0.f),
++	};
++}
++
++#undef LOCTEXT_NAMESPACE
+diff --git a/Source/FIH2/Private/System/TutorialSubsystem.cpp b/Source/FIH2/Private/System/TutorialSubsystem.cpp
+new file mode 100644
+index 0000000..a91cf40
+--- /dev/null
++++ b/Source/FIH2/Private/System/TutorialSubsystem.cpp
+@@ -0,0 +1,428 @@
++#include "System/TutorialSubsystem.h"
++
++#include "Blueprint/UserWidget.h"
++#include "Camera/PlayerCameraManager.h"
++#include "Engine/Engine.h"
++#include "Engine/World.h"
++#include "EngineUtils.h"
++#include "Fish/Fish.h"
++#include "Fish/PredatorFish.h"
++#include "Inanimate/Kelp.h"
++#include "System/MouseController.h"
++#include "System/TutorialWidget.h"
++
++DEFINE_LOG_CATEGORY_STATIC(LogTutorial, Log, All);
++
++#define LOCTEXT_NAMESPACE "FIH2Tutorial"
++
++namespace TutorialRules
++{
++	/** TUTO_ANGLE_CAMERA [°] : une rotation de caméra de cet angle valide aussi l'étape MoveCamera. */
++	constexpr float CameraTurnDegrees = 20.f;
++	/** Kelps « éloignés » choisis automatiquement quand aucun n'est tagué (niveau 1 : 2 kelps à déplacer). */
++	constexpr int32 FallbackFarKelpCount = 2;
++	/** TUTO_DUREE_ALERTE [s] : durée d'affichage de l'alerte « le compte à rebours repart de zéro ». */
++	constexpr float ResetWarningDuration = 4.f;
++	/** Ordre d'affichage du panneau au-dessus du HUD. */
++	constexpr int32 PanelZOrder = 20;
++}
++
++UTutorialSubsystem* UTutorialSubsystem::Get(const UObject* WorldContext)
++{
++	const UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
++	return World ? World->GetSubsystem<UTutorialSubsystem>() : nullptr;
++}
++
++bool UTutorialSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
++{
++	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
++}
++
++void UTutorialSubsystem::Initialize(FSubsystemCollectionBase& Collection)
++{
++	Collection.InitializeDependency<UEcosystemSubsystem>();
++	Super::Initialize(Collection);
++}
++
++void UTutorialSubsystem::Deinitialize()
++{
++	Stop();
++	Super::Deinitialize();
++}
++
++void UTutorialSubsystem::OnWorldBeginPlay(UWorld& InWorld)
++{
++	Super::OnWorldBeginPlay(InWorld);
++
++	Ecosystem = UEcosystemSubsystem::Get(&InWorld);
++	Config = Ecosystem ? Ecosystem->EnsureLevelConfig() : nullptr;
++	if (!Config || !Config->bIsTutorial || Config->TutorialSteps.Num() == 0)
++	{
++		return;
++	}
++
++	// Phase guidée : rien ne peut être perdu avant l'étape finale.
++	Ecosystem->SetDefeatEnabled(false);
++	Ecosystem->SetTimedObjectiveEnabled(false);
++	Ecosystem->SetStarvationDeathAllowed(false);
++
++	Ecosystem->OnUpdated.AddUniqueDynamic(this, &UTutorialSubsystem::HandleEcosystemUpdated);
++	Ecosystem->OnStateChanged.AddUniqueDynamic(this, &UTutorialSubsystem::HandleEcosystemStateChanged);
++	bActive = true;
++	bStarted = false;
++	StepIndex = -1;
++}
++
++// ------------------------------------------------------------------ Démarrage / arrêt
++
++void UTutorialSubsystem::Start()
++{
++	bStarted = true;
++	UWorld* World = GetWorld();
++	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
++
++	Controller = Cast<AMouseController>(PC);
++	if (Controller.IsValid())
++	{
++		Controller->OnSelectionChanged.AddUniqueDynamic(this, &UTutorialSubsystem::HandleSelectionChanged);
++	}
++	else
++	{
++		UE_LOG(LogTutorial, Warning, TEXT("Pas d'AMouseController : les étapes de sélection et de saisie ne pourront pas être validées."));
++	}
++
++	if (PC)
++	{
++		const TSubclassOf<UTutorialWidget> WidgetClass = Config->TutorialWidgetClass
++			? Config->TutorialWidgetClass : TSubclassOf<UTutorialWidget>(UTutorialWidget::StaticClass());
++		Widget = CreateWidget<UTutorialWidget>(PC, WidgetClass);
++		if (Widget)
++		{
++			Widget->AddToViewport(TutorialRules::PanelZOrder);
++			Widget->SetAnchorsInViewport(FAnchors(0.5f, 0.f));
++			Widget->SetAlignmentInViewport(FVector2D(0.5f, 0.f));
++			Widget->SetPositionInViewport(FVector2D(0.f, Config->TutorialPanelTopOffset), false);
++		}
++	}
++
++	ResolveFarKelps();
++	EnterStep(0);
++}
++
++void UTutorialSubsystem::Stop()
++{
++	bActive = false;
++	if (Widget)
++	{
++		Widget->RemoveFromParent();
++		Widget = nullptr;
++	}
++	if (Ecosystem)
++	{
++		Ecosystem->OnUpdated.RemoveDynamic(this, &UTutorialSubsystem::HandleEcosystemUpdated);
++		Ecosystem->OnStateChanged.RemoveDynamic(this, &UTutorialSubsystem::HandleEcosystemStateChanged);
++	}
++	if (Controller.IsValid())
++	{
++		Controller->OnSelectionChanged.RemoveDynamic(this, &UTutorialSubsystem::HandleSelectionChanged);
++	}
++}
++
++// ------------------------------------------------------------------ Étapes
++
++void UTutorialSubsystem::EnterStep(int32 NewIndex)
++{
++	const TArray<FTutorialStep>& Steps = Config->TutorialSteps;
++	if (!Steps.IsValidIndex(NewIndex))
++	{
++		// Liste sans étape FinalHold : le tutoriel se termine sur une victoire à la fin des étapes.
++		UE_LOG(LogTutorial, Log, TEXT("Tutoriel terminé (fin des étapes)."));
++		OnCompleted.Broadcast();
++		if (Ecosystem)
++		{
++			Ecosystem->FinishLevel(true);
++		}
++		Stop();
++		return;
++	}
++
++	StepIndex = NewIndex;
++	StepTime = 0.f;
++	StepCounter = 0.f;
++	WarningTimeLeft = 0.f;
++	bFishSelected = false;
++
++	if (const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
++	{
++		if (PC->PlayerCameraManager)
++		{
++			CameraStartLocation = PC->PlayerCameraManager->GetCameraLocation();
++			CameraStartRotation = PC->PlayerCameraManager->GetCameraRotation();
++		}
++	}
++
++	const FTutorialStep& Step = Steps[StepIndex];
++	if (Step.Type == ETutorialStepType::FinalHold && Ecosystem)
++	{
++		// Étape finale : la partie redevient « réelle ».
++		Ecosystem->SetDefeatEnabled(true);
++		Ecosystem->SetStarvationDeathAllowed(true);
++	}
++
++	if (Widget)
++	{
++		Widget->ShowStep(StepIndex + 1, Steps.Num(), Step.Title, Step.Message);
++	}
++
++	UE_LOG(LogTutorial, Log, TEXT("Tutoriel : étape %d / %d (%s)"), StepIndex + 1, Steps.Num(), *UEnum::GetValueAsString(Step.Type));
++	OnStepChanged.Broadcast(StepIndex, Step.Type);
++}
++
++void UTutorialSubsystem::SkipStep()
++{
++	if (bActive && bStarted)
++	{
++		EnterStep(StepIndex + 1);
++	}
++}
++
++void UTutorialSubsystem::HandleEcosystemUpdated(const FEcosystemSnapshot& Snapshot)
++{
++	if (!bActive || !Config)
++	{
++		return;
++	}
++	if (!bStarted)
++	{
++		LastElapsed = Snapshot.ElapsedTime;
++		Start();
++		return;
++	}
++
++	const float Dt = FMath::Max(0.f, Snapshot.ElapsedTime - LastElapsed);
++	LastElapsed = Snapshot.ElapsedTime;
++
++	if (!Config->TutorialSteps.IsValidIndex(StepIndex))
++	{
++		return;
++	}
++	const FTutorialStep& Step = Config->TutorialSteps[StepIndex];
++	StepTime += Dt;
++
++	if (Step.Type == ETutorialStepType::FinalHold)
++	{
++		UpdateFinalHold(Step, Snapshot, Dt);
++		return;
++	}
++
++	const bool bTimedOut = Step.MaxDuration > 0.f && StepTime >= Step.MaxDuration;
++	if (bTimedOut || (IsStepDone(Step, Snapshot, Dt) && StepTime >= Step.MinDuration))
++	{
++		EnterStep(StepIndex + 1);
++	}
++}
++
++bool UTutorialSubsystem::IsStepDone(const FTutorialStep& Step, const FEcosystemSnapshot& Snapshot, float Dt)
++{
++	switch (Step.Type)
++	{
++	case ETutorialStepType::MoveCamera:
++	{
++		const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
++		if (!PC || !PC->PlayerCameraManager)
++		{
++			return true; // pas de caméra à tester : on ne bloque pas le joueur
++		}
++		const float Moved = FVector::Dist(PC->PlayerCameraManager->GetCameraLocation(), CameraStartLocation);
++		const float TurnedDeg = FMath::RadiansToDegrees(
++			PC->PlayerCameraManager->GetCameraRotation().Quaternion().AngularDistance(CameraStartRotation.Quaternion()));
++		return Moved >= Step.Value || TurnedDeg >= TutorialRules::CameraTurnDegrees;
++	}
++
++	case ETutorialStepType::SelectFish:
++		return bFishSelected;
++
++	case ETutorialStepType::DragObject:
++		if (Controller.IsValid() && Controller->GetIsDragging())
++		{
++			StepCounter += Dt;
++		}
++		return StepCounter >= Step.Value;
++
++	case ETutorialStepType::Observe:
++		return StepTime >= Step.Value;
++
++	case ETutorialStepType::WaitHungerRising:
++		return Snapshot.StressHunger >= Step.Value;
++
++	case ETutorialStepType::FeedFish:
++		if (Widget)
++		{
++			Widget->SetProgress(FText::Format(LOCTEXT("FeedProgress", "Poissons affamés : {0} %"),
++				FText::AsNumber(FMath::RoundToInt(Snapshot.StarvingPercent))));
++		}
++		return Snapshot.StarvingPercent <= 0.f;
++
++	case ETutorialStepType::GatherKelps:
++	{
++		FarKelps.RemoveAll([](const TWeakObjectPtr<AKelp>& K) { return !K.IsValid(); });
++		const FVector Center = GetNearKelpsCenter();
++		int32 Gathered = 0;
++		for (const TWeakObjectPtr<AKelp>& K : FarKelps)
++		{
++			// Distance horizontale : le relief du fond ne doit pas compter.
++			if (FVector::Dist2D(K->GetActorLocation(), Center) <= Step.Value)
++			{
++				++Gathered;
++			}
++		}
++		if (Widget && FarKelps.Num() > 0)
++		{
++			Widget->SetProgress(FText::Format(LOCTEXT("KelpProgress", "Kelps rapprochés : {0} / {1}"),
++				FText::AsNumber(Gathered), FText::AsNumber(FarKelps.Num())));
++		}
++		return Gathered >= FarKelps.Num();
++	}
++
++	default:
++		return true;
++	}
++}
++
++void UTutorialSubsystem::UpdateFinalHold(const FTutorialStep& Step, const FEcosystemSnapshot& Snapshot, float Dt)
++{
++	const bool bRed = Snapshot.Gauge >= Config->TutorialRedGauge;
++	if (bRed)
++	{
++		// Décision du 13/11 : un passage au rouge remet le compte à rebours à zéro, avec une indication.
++		WarningTimeLeft = TutorialRules::ResetWarningDuration;
++		StepCounter = 0.f;
++	}
++	else
++	{
++		StepCounter += Dt;
++		WarningTimeLeft = FMath::Max(0.f, WarningTimeLeft - Dt);
++	}
++
++	if (Widget)
++	{
++		Widget->SetProgress(FText::Format(LOCTEXT("HoldProgress", "Jauge hors du rouge : {0} / {1} s"),
++			FText::AsNumber(FMath::FloorToInt(StepCounter)), FText::AsNumber(FMath::RoundToInt(Step.Value))));
++		Widget->SetWarning(WarningTimeLeft > 0.f
++			? (bRed ? LOCTEXT("HoldRed", "La jauge est au rouge : le compte à rebours repart de zéro.")
++			        : LOCTEXT("HoldRestarted", "Le compte à rebours a redémarré."))
++			: FText::GetEmpty());
++	}
++
++	if (StepCounter >= Step.Value)
++	{
++		UE_LOG(LogTutorial, Log, TEXT("Tutoriel réussi : maintien de %.0f s atteint."), Step.Value);
++		OnCompleted.Broadcast();
++		if (Ecosystem)
++		{
++			Ecosystem->FinishLevel(true); // l'écran de fin du HUD se déclenche via OnStateChanged
++		}
++		Stop();
++	}
++}
++
++// ------------------------------------------------------------------ Événements
++
++void UTutorialSubsystem::HandleEcosystemStateChanged(EEcosystemState NewState)
++{
++	if (NewState != EEcosystemState::Playing)
++	{
++		Stop(); // victoire ou défaite : l'écran de fin du HUD prend le relais
++	}
++}
++
++void UTutorialSubsystem::HandleSelectionChanged(AActor* NewSelection)
++{
++	if (Cast<AFish>(NewSelection))
++	{
++		bFishSelected = true;
++	}
++}
++
++// ------------------------------------------------------------------ Kelps
++
++void UTutorialSubsystem::ResolveFarKelps()
++{
++	FarKelps.Reset();
++	UWorld* World = GetWorld();
++	if (!World)
++	{
++		return;
++	}
++
++	TArray<AKelp*> AllKelps;
++	for (TActorIterator<AKelp> It(World); It; ++It)
++	{
++		AllKelps.Add(*It);
++		if (!Config->TutorialFarKelpTag.IsNone() && It->ActorHasTag(Config->TutorialFarKelpTag))
++		{
++			FarKelps.Add(*It);
++		}
++	}
++	if (FarKelps.Num() > 0 || AllKelps.Num() <= TutorialRules::FallbackFarKelpCount)
++	{
++		UE_LOG(LogTutorial, Log, TEXT("Tutoriel : %d kelp(s) éloigné(s) tagué(s) « %s »."), FarKelps.Num(), *Config->TutorialFarKelpTag.ToString());
++		return;
++	}
++
++	// Pas de tag : les kelps les plus loin des poissons au démarrage.
++	FVector FishCenter = FVector::ZeroVector;
++	int32 FishCount = 0;
++	for (TActorIterator<AFish> It(World); It; ++It)
++	{
++		if (!It->IsA<APredatorFish>())
++		{
++			FishCenter += It->GetActorLocation();
++			++FishCount;
++		}
++	}
++	if (FishCount == 0)
++	{
++		return;
++	}
++	FishCenter /= FishCount;
++
++	AllKelps.Sort([&FishCenter](const AKelp& A, const AKelp& B)
++	{
++		return FVector::DistSquared2D(A.GetActorLocation(), FishCenter) > FVector::DistSquared2D(B.GetActorLocation(), FishCenter);
++	});
++	for (int32 i = 0; i < TutorialRules::FallbackFarKelpCount; ++i)
++	{
++		FarKelps.Add(AllKelps[i]);
++		UE_LOG(LogTutorial, Log, TEXT("Tutoriel : kelp éloigné détecté automatiquement : %s"), *AllKelps[i]->GetName());
++	}
++}
++
++FVector UTutorialSubsystem::GetNearKelpsCenter() const
++{
++	FVector Sum = FVector::ZeroVector;
++	int32 Count = 0;
++	if (UWorld* World = GetWorld())
++	{
++		for (TActorIterator<AKelp> It(World); It; ++It)
++		{
++			if (!FarKelps.Contains(TWeakObjectPtr<AKelp>(*It)))
++			{
++				Sum += It->GetActorLocation();
++				++Count;
++			}
++		}
++		if (Count == 0)
++		{
++			// Aucun kelp « proche » : on vise les poissons.
++			for (TActorIterator<AFish> It(World); It; ++It)
++			{
++				Sum += It->GetActorLocation();
++				++Count;
++			}
++		}
++	}
++	return Count > 0 ? Sum / Count : FVector::ZeroVector;
++}
++
++#undef LOCTEXT_NAMESPACE
+diff --git a/Source/FIH2/Private/System/TutorialWidget.cpp b/Source/FIH2/Private/System/TutorialWidget.cpp
+new file mode 100644
+index 0000000..8e03bca
+--- /dev/null
++++ b/Source/FIH2/Private/System/TutorialWidget.cpp
+@@ -0,0 +1,121 @@
++#include "System/TutorialWidget.h"
++
++#include "Blueprint/WidgetTree.h"
++#include "Components/Border.h"
++#include "Components/SizeBox.h"
++#include "Components/TextBlock.h"
++#include "Components/VerticalBox.h"
++#include "Components/VerticalBoxSlot.h"
++#include "Styling/CoreStyle.h"
++
++#define LOCTEXT_NAMESPACE "FIH2Tutorial"
++
++namespace TutorialWidgetLayout
++{
++	// Tailles de police [pt] et espacements [px] du panneau par défaut.
++	constexpr int32 StepFontSize = 11;
++	constexpr int32 TitleFontSize = 18;
++	constexpr int32 BodyFontSize = 13;
++	constexpr float PaddingX = 22.f;
++	constexpr float PaddingY = 14.f;
++	constexpr float LineGap = 6.f;
++}
++
++TSharedRef<SWidget> UTutorialWidget::RebuildWidget()
++{
++	// Classe C++ utilisée directement : pas d'arbre issu d'un designer, on construit le panneau par défaut.
++	if (!WidgetTree || !WidgetTree->RootWidget)
++	{
++		BuildDefaultTree();
++	}
++	return Super::RebuildWidget();
++}
++
++void UTutorialWidget::NativeOnInitialized()
++{
++	Super::NativeOnInitialized();
++	// Le panneau ne doit jamais bloquer le clic, la sélection ni le drag & throw.
++	SetVisibility(ESlateVisibility::HitTestInvisible);
++}
++
++void UTutorialWidget::BuildDefaultTree()
++{
++	using namespace TutorialWidgetLayout;
++
++	if (!WidgetTree)
++	{
++		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"), RF_Transient);
++	}
++
++	USizeBox* Root = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("Root"));
++	Root->SetMaxDesiredWidth(PanelMaxWidth);
++	WidgetTree->RootWidget = Root;
++
++	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Background"));
++	Background->SetBrushColor(BackgroundColor);
++	Background->SetPadding(FMargin(PaddingX, PaddingY));
++	Root->AddChild(Background);
++
++	UVerticalBox* Lines = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Lines"));
++	Background->AddChild(Lines);
++
++	auto AddLine = [&](FName Name, const TCHAR* Typeface, int32 Size, const FLinearColor& Color) -> UTextBlock*
++	{
++		UTextBlock* Block = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
++		Block->SetFont(FCoreStyle::GetDefaultFontStyle(Typeface, Size));
++		Block->SetColorAndOpacity(FSlateColor(Color));
++		Block->SetAutoWrapText(true);
++		if (UVerticalBoxSlot* LineSlot = Lines->AddChildToVerticalBox(Block))
++		{
++			LineSlot->SetPadding(FMargin(0.f, 0.f, 0.f, LineGap));
++		}
++		return Block;
++	};
++
++	StepText = AddLine(TEXT("StepText"), TEXT("Regular"), StepFontSize, AccentColor);
++	TitleText = AddLine(TEXT("TitleText"), TEXT("Bold"), TitleFontSize, FLinearColor::White);
++	MessageText = AddLine(TEXT("MessageText"), TEXT("Regular"), BodyFontSize, FLinearColor(0.9f, 0.93f, 0.95f, 1.f));
++	ProgressText = AddLine(TEXT("ProgressText"), TEXT("Bold"), BodyFontSize, AccentColor);
++	WarningText = AddLine(TEXT("WarningText"), TEXT("Bold"), BodyFontSize, WarningColor);
++
++	ProgressText->SetVisibility(ESlateVisibility::Collapsed);
++	WarningText->SetVisibility(ESlateVisibility::Collapsed);
++}
++
++void UTutorialWidget::SetLine(UTextBlock* Block, const FText& Text)
++{
++	if (!Block)
++	{
++		return;
++	}
++	Block->SetText(Text);
++	Block->SetVisibility(Text.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
++}
++
++void UTutorialWidget::ShowStep(int32 StepNumber, int32 StepCount, const FText& Title, const FText& Message)
++{
++	SetLine(StepText, FText::Format(LOCTEXT("StepCounter", "TUTORIEL  {0} / {1}"), StepNumber, StepCount));
++	SetLine(TitleText, Title);
++	SetLine(MessageText, Message);
++	SetLine(ProgressText, FText::GetEmpty());
++	SetLine(WarningText, FText::GetEmpty());
++	OnStepShown(StepNumber, StepCount);
++}
++
++void UTutorialWidget::SetProgress(const FText& Progress)
++{
++	if (ProgressText && !ProgressText->GetText().EqualTo(Progress))
++	{
++		SetLine(ProgressText, Progress);
++	}
++}
++
++void UTutorialWidget::SetWarning(const FText& Warning)
++{
++	if (WarningText && !WarningText->GetText().EqualTo(Warning))
++	{
++		SetLine(WarningText, Warning);
++	}
++}
++
++#undef LOCTEXT_NAMESPACE
+diff --git a/Source/FIH2/Public/System/EcosystemSubsystem.h b/Source/FIH2/Public/System/EcosystemSubsystem.h
+index b9477d7..4e21177 100644
+--- a/Source/FIH2/Public/System/EcosystemSubsystem.h
++++ b/Source/FIH2/Public/System/EcosystemSubsystem.h
+@@ -119,6 +119,32 @@ public:
+ 	UFUNCTION(BlueprintCallable, Category = "Ecosystem")
+ 	void ResetEcosystem();
+ 
++	/** Version C++ de GetLevelConfig qui charge la config si elle ne l'est pas encore (ordre d'init des sous-systèmes). */
++	ULevelConfig* EnsureLevelConfig();
++
++	// ---------------------------------------------------------------- Règles pilotables (tutoriel)
++	/** Défaite par jauge et par extinction. Désactivée : les timers de défaite restent à zéro. */
++	UFUNCTION(BlueprintCallable, Category = "Ecosystem|Rules")
++	void SetDefeatEnabled(bool bEnabled);
++
++	UFUNCTION(BlueprintPure, Category = "Ecosystem|Rules")
++	bool IsDefeatEnabled() const { return bDefeatEnabled; }
++
++	/** Victoire / défaite évaluée à DUREE_NIVEAU. Désactivée : le chrono tourne mais ne décide rien. */
++	UFUNCTION(BlueprintCallable, Category = "Ecosystem|Rules")
++	void SetTimedObjectiveEnabled(bool bEnabled) { bTimedObjectiveEnabled = bEnabled; }
++
++	/** Mort de faim autorisée. La mort à Hunger 0 est faite par BP_Fish : il doit tester CanFishStarveToDeath avant de se détruire. */
++	UFUNCTION(BlueprintCallable, Category = "Ecosystem|Rules")
++	void SetStarvationDeathAllowed(bool bAllowed) { bStarvationDeathAllowed = bAllowed; }
++
++	UFUNCTION(BlueprintPure, Category = "Ecosystem|Rules")
++	bool CanFishStarveToDeath() const { return bStarvationDeathAllowed; }
++
++	/** Termine la partie (ex. victoire du tutoriel). Sans effet si elle est déjà terminée. */
++	UFUNCTION(BlueprintCallable, Category = "Ecosystem|Rules")
++	void FinishLevel(bool bWon);
++
+ 	/** Émis une seule fois quand la partie passe à Won ou Lost. */
+ 	UPROPERTY(BlueprintAssignable, Category = "Ecosystem")
+ 	FOnEcosystemStateChanged OnStateChanged;
+@@ -184,6 +210,11 @@ private:
+ 	int32 EggsLost = 0;
+ 	bool bLevelStarted = false;
+ 
++	// Règles pilotables (le tutoriel les coupe jusqu'à son étape finale). Conservées par ResetEcosystem.
++	bool bDefeatEnabled = true;
++	bool bTimedObjectiveEnabled = true;
++	bool bStarvationDeathAllowed = true;
++
+ 	// Naissance en cours : la découverte d'acteur (HandleActorSpawned) doit savoir que c'est un alevin.
+ 	bool bSpawningFry = false;
+ 	FVector PendingFryAdultScale = FVector::OneVector;
+diff --git a/Source/FIH2/Public/System/LevelConfig.h b/Source/FIH2/Public/System/LevelConfig.h
+index 633d319..21a2863 100644
+--- a/Source/FIH2/Public/System/LevelConfig.h
++++ b/Source/FIH2/Public/System/LevelConfig.h
+@@ -9,6 +9,58 @@
+ #include "Engine/DataAsset.h"
+ #include "LevelConfig.generated.h"
+ 
++class UTutorialWidget;
++
++/** Type d'une étape du tutoriel : définit la condition qui la valide (voir UTutorialSubsystem). */
++UENUM(BlueprintType)
++enum class ETutorialStepType : uint8
++{
++	/** Le joueur déplace, tourne ou zoome la caméra. Value = distance [cm] à parcourir (la rotation compte aussi). */
++	MoveCamera UMETA(DisplayName = "Bouger la caméra"),
++	/** Le joueur clique sur un poisson (le panneau d'infos s'ouvre). */
++	SelectFish UMETA(DisplayName = "Sélectionner un poisson"),
++	/** Le joueur attrape un objet et le déplace. Value = durée de saisie cumulée [s]. */
++	DragObject UMETA(DisplayName = "Attraper un objet"),
++	/** Simple observation. Value = durée [s]. */
++	Observe UMETA(DisplayName = "Observer"),
++	/** Attend que la faim monte. Value = stress de faim (0–100) à atteindre. */
++	WaitHungerRising UMETA(DisplayName = "Attendre la faim"),
++	/** Le joueur nourrit les poissons : plus aucun poisson affamé. */
++	FeedFish UMETA(DisplayName = "Nourrir un poisson"),
++	/** Les kelps éloignés sont rapprochés des autres. Value = rayon [cm] autour du groupe de kelps proches. */
++	GatherKelps UMETA(DisplayName = "Rapprocher les kelps"),
++	/** Étape finale : défaite réactivée, maintenir la jauge hors du rouge. Value = durée [s]. */
++	FinalHold UMETA(DisplayName = "Maintien final")
++};
++
++/** Une étape du tutoriel : texte affiché + condition de validation. */
++USTRUCT(BlueprintType)
++struct FTutorialStep
++{
++	GENERATED_BODY()
++
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
++	ETutorialStepType Type = ETutorialStepType::Observe;
++
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
++	FText Title;
++
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (MultiLine = true))
++	FText Message;
++
++	/** Paramètre de la condition (sens selon Type, voir ETutorialStepType). */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (ClampMin = "0"))
++	float Value = 0.f;
++
++	/** TUTO_DUREE_MIN_ETAPE [s] : temps minimal d'affichage avant de passer à la suite (évite les messages qui clignotent). */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (ClampMin = "0"))
++	float MinDuration = 3.f;
++
++	/** TUTO_DUREE_MAX_ETAPE [s] : au-delà, l'étape est validée d'office (anti-blocage). 0 = pas de limite. Ignoré par FinalHold. */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (ClampMin = "0"))
++	float MaxDuration = 0.f;
++};
++
+ 
+ UCLASS(BlueprintType)
+ class FIH2_API ULevelConfig : public UDataAsset
+@@ -16,6 +68,8 @@ class FIH2_API ULevelConfig : public UDataAsset
+ 	GENERATED_BODY()
+ 
+ public:
++	ULevelConfig();
++
+ 	// ---------------------------------------------------------------- Mission (D-01)
+ 	/** OBJECTIF_POISSONS_BASE : adultes de base vivants requis à la fin du niveau (D-01 : 5). */
+ 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mission", meta = (ClampMin = "1"))
+@@ -136,6 +190,35 @@ public:
+ 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reproduction", meta = (ClampMin = "2"))
+ 	int32 MaxFishTotal = 40;
+ 
++	// ---------------------------------------------------------------- Tutoriel
++	/** Ce niveau est un tutoriel : étapes guidées ; défaite et mort de faim désactivées jusqu'à l'étape FinalHold ;
++	 *  la victoire est donnée par le maintien final (l'objectif chronométré DUREE_NIVEAU est ignoré, le chrono tourne quand même). */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
++	bool bIsTutorial = true;
++
++	/** Étapes, dans l'ordre. Valeurs par défaut remplies par le constructeur (niveau 1). */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (EditCondition = "bIsTutorial", TitleProperty = "Title"))
++	TArray<FTutorialStep> TutorialSteps;
++
++	/** TUTO_SEUIL_ROUGE_JAUGE : pendant le maintien final, la jauge D est « au rouge » à partir de cette valeur
++	 *  (le compte à rebours repart alors de zéro). Par défaut = SEUIL_DEFAITE_JAUGE (50), seuil où le timer de défaite
++	 *  commence à monter. À aligner sur la couleur rouge de la jauge du HUD. */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (EditCondition = "bIsTutorial", ClampMin = "1", ClampMax = "100"))
++	float TutorialRedGauge = 50.f;
++
++	/** Tag d'acteur des kelps « éloignés » à rapprocher. Sans kelp tagué : les 2 kelps les plus loin des poissons au démarrage. */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (EditCondition = "bIsTutorial"))
++	FName TutorialFarKelpTag = TEXT("TutoKelpFar");
++
++	/** Widget du panneau de guidage. Vide = UTutorialWidget (panneau construit en C++, sans asset). Un WBP enfant
++	 *  peut le remplacer en reprenant les noms TitleText, MessageText, StepText, ProgressText, WarningText. */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (EditCondition = "bIsTutorial"))
++	TSubclassOf<UTutorialWidget> TutorialWidgetClass;
++
++	/** Décalage vertical [px] du panneau de guidage depuis le haut de l'écran. */
++	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial", meta = (EditCondition = "bIsTutorial"))
++	float TutorialPanelTopOffset = 120.f;
++
+ 	// ---------------------------------------------------------------- Debug
+ 	/** Affiche l'état de l'écosystème en texte à l'écran (retiré des builds Shipping). */
+ 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+diff --git a/Source/FIH2/Public/System/TutorialSubsystem.h b/Source/FIH2/Public/System/TutorialSubsystem.h
+new file mode 100644
+index 0000000..dba696c
+--- /dev/null
++++ b/Source/FIH2/Public/System/TutorialSubsystem.h
+@@ -0,0 +1,101 @@
++// Tutoriel guidé du niveau 1.
++//
++// Actif si la ULevelConfig du niveau a bIsTutorial. Enchaîne les étapes de ULevelConfig::TutorialSteps et affiche
++// le panneau de guidage (UTutorialWidget). Aucun Tick : tout avance au rythme de la simulation
++// (UEcosystemSubsystem::OnUpdated, toutes les SIM_TICK s) et de la sélection (AMouseController::OnSelectionChanged).
++//
++// Règles du tutoriel (décisions du 13/11/2026) :
++//  - défaite (jauge, extinction) et mort de faim désactivées jusqu'à l'étape FinalHold ;
++//  - le chrono tourne dès le début mais l'objectif chronométré (DUREE_NIVEAU) est ignoré ;
++//  - victoire = jauge hors du rouge pendant la durée de l'étape FinalHold ; un passage au rouge remet le compte à zéro.
++
++#pragma once
++
++#include "CoreMinimal.h"
++#include "Subsystems/WorldSubsystem.h"
++#include "System/EcosystemSubsystem.h"
++#include "System/LevelConfig.h"
++#include "TutorialSubsystem.generated.h"
++
++class AKelp;
++class AMouseController;
++class UTutorialWidget;
++
++DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTutorialStepChanged, int32, StepIndex, ETutorialStepType, StepType);
++DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTutorialCompleted);
++
++UCLASS()
++class FIH2_API UTutorialSubsystem : public UWorldSubsystem
++{
++	GENERATED_BODY()
++
++public:
++	static UTutorialSubsystem* Get(const UObject* WorldContext);
++
++	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
++	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
++	virtual void Deinitialize() override;
++	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
++
++	UFUNCTION(BlueprintPure, Category = "Tutorial")
++	bool IsTutorialActive() const { return bActive; }
++
++	/** Index de l'étape courante (0 = première), -1 avant le début ou hors tutoriel. */
++	UFUNCTION(BlueprintPure, Category = "Tutorial")
++	int32 GetCurrentStepIndex() const { return StepIndex; }
++
++	/** Passe à l'étape suivante sans attendre sa condition (debug, ou bouton « passer » plus tard). */
++	UFUNCTION(BlueprintCallable, Category = "Tutorial")
++	void SkipStep();
++
++	UPROPERTY(BlueprintAssignable, Category = "Tutorial")
++	FOnTutorialStepChanged OnStepChanged;
++
++	UPROPERTY(BlueprintAssignable, Category = "Tutorial")
++	FOnTutorialCompleted OnCompleted;
++
++private:
++	UFUNCTION()
++	void HandleEcosystemUpdated(const FEcosystemSnapshot& Snapshot);
++
++	UFUNCTION()
++	void HandleEcosystemStateChanged(EEcosystemState NewState);
++
++	UFUNCTION()
++	void HandleSelectionChanged(AActor* NewSelection);
++
++	/** Premier pas de simulation : le joueur, son contrôleur et les acteurs du niveau existent. */
++	void Start();
++	void EnterStep(int32 NewIndex);
++	/** Évalue la condition de l'étape courante. Dt = temps de simulation écoulé depuis le dernier appel. */
++	bool IsStepDone(const FTutorialStep& Step, const FEcosystemSnapshot& Snapshot, float Dt);
++	void UpdateFinalHold(const FTutorialStep& Step, const FEcosystemSnapshot& Snapshot, float Dt);
++	void ResolveFarKelps();
++	FVector GetNearKelpsCenter() const;
++	void Stop();
++
++	UPROPERTY(Transient)
++	TObjectPtr<UEcosystemSubsystem> Ecosystem;
++
++	UPROPERTY(Transient)
++	TObjectPtr<ULevelConfig> Config;
++
++	UPROPERTY(Transient)
++	TObjectPtr<UTutorialWidget> Widget;
++
++	TWeakObjectPtr<AMouseController> Controller;
++	TArray<TWeakObjectPtr<AKelp>> FarKelps;
++
++	bool bActive = false;
++	bool bStarted = false;
++	int32 StepIndex = -1;
++
++	// État de l'étape courante (remis à zéro par EnterStep)
++	float StepTime = 0.f;
++	float StepCounter = 0.f;       // durée de saisie, d'observation ou de maintien selon l'étape
++	float LastElapsed = 0.f;
++	float WarningTimeLeft = 0.f;
++	bool bFishSelected = false;
++	FVector CameraStartLocation = FVector::ZeroVector;
++	FRotator CameraStartRotation = FRotator::ZeroRotator;
++};
+diff --git a/Source/FIH2/Public/System/TutorialWidget.h b/Source/FIH2/Public/System/TutorialWidget.h
+new file mode 100644
+index 0000000..a6a9a41
+--- /dev/null
++++ b/Source/FIH2/Public/System/TutorialWidget.h
+@@ -0,0 +1,73 @@
++// Panneau de guidage du tutoriel (haut de l'écran).
++//
++// Fonctionne sans asset : si aucun arbre de widgets n'existe (classe C++ utilisée directement), il construit
++// lui-même un panneau simple (titre, message, ligne de progression, avertissement). Un Widget Blueprint enfant
++// peut fournir son propre design en nommant ses TextBlock comme les BindWidgetOptional ci-dessous.
++// Le panneau ne capte pas la souris (HitTestInvisible) : clic, sélection et drag & throw passent au travers.
++
++#pragma once
++
++#include "CoreMinimal.h"
++#include "Blueprint/UserWidget.h"
++#include "TutorialWidget.generated.h"
++
++class UTextBlock;
++
++UCLASS()
++class FIH2_API UTutorialWidget : public UUserWidget
++{
++	GENERATED_BODY()
++
++public:
++	/** Affiche une étape. StepNumber commence à 1. */
++	UFUNCTION(BlueprintCallable, Category = "Tutorial")
++	void ShowStep(int32 StepNumber, int32 StepCount, const FText& Title, const FText& Message);
++
++	/** Ligne de progression sous le message (texte vide = masquée). */
++	UFUNCTION(BlueprintCallable, Category = "Tutorial")
++	void SetProgress(const FText& Progress);
++
++	/** Avertissement en couleur (texte vide = masqué). */
++	UFUNCTION(BlueprintCallable, Category = "Tutorial")
++	void SetWarning(const FText& Warning);
++
++protected:
++	virtual void NativeOnInitialized() override;
++	virtual TSharedRef<SWidget> RebuildWidget() override;
++
++	/** Pour animer un WBP enfant à chaque nouvelle étape. */
++	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial")
++	void OnStepShown(int32 StepNumber, int32 StepCount);
++
++	UPROPERTY(BlueprintReadOnly, Category = "Tutorial", meta = (BindWidgetOptional))
++	TObjectPtr<UTextBlock> StepText;
++
++	UPROPERTY(BlueprintReadOnly, Category = "Tutorial", meta = (BindWidgetOptional))
++	TObjectPtr<UTextBlock> TitleText;
++
++	UPROPERTY(BlueprintReadOnly, Category = "Tutorial", meta = (BindWidgetOptional))
++	TObjectPtr<UTextBlock> MessageText;
++
++	UPROPERTY(BlueprintReadOnly, Category = "Tutorial", meta = (BindWidgetOptional))
++	TObjectPtr<UTextBlock> ProgressText;
++
++	UPROPERTY(BlueprintReadOnly, Category = "Tutorial", meta = (BindWidgetOptional))
++	TObjectPtr<UTextBlock> WarningText;
++
++	/** Panneau par défaut : largeur maximale [px]. */
++	UPROPERTY(EditDefaultsOnly, Category = "Tutorial|Default Layout")
++	float PanelMaxWidth = 640.f;
++
++	UPROPERTY(EditDefaultsOnly, Category = "Tutorial|Default Layout")
++	FLinearColor BackgroundColor = FLinearColor(0.f, 0.03f, 0.07f, 0.78f);
++
++	UPROPERTY(EditDefaultsOnly, Category = "Tutorial|Default Layout")
++	FLinearColor AccentColor = FLinearColor(0.35f, 0.85f, 1.f, 1.f);
++
++	UPROPERTY(EditDefaultsOnly, Category = "Tutorial|Default Layout")
++	FLinearColor WarningColor = FLinearColor(1.f, 0.35f, 0.25f, 1.f);
++
++private:
++	void BuildDefaultTree();
++	static void SetLine(UTextBlock* Block, const FText& Text);
++};
