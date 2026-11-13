@@ -54,6 +54,19 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Sand")
 	TArray<TEnumAsByte<ECollisionChannel>> BlockingObjectTypes = { ECC_WorldStatic };
 
+	/** Remonte chaque grain au-dessus du sol trouvé sous lui : un grain créé sous le relief (collision en triangles)
+	 *  n'est pas repoussé et le traverse. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sand|Ground")
+	bool bLiftAboveGround = true;
+
+	/** Demi-hauteur (cm) du tracé vertical qui cherche le sol, au-dessus et au-dessous de chaque case. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sand|Ground", meta = (ClampMin = "0.0"))
+	float GroundTraceHalfHeight = 5000.f;
+
+	/** Marge (cm) entre le bas du grain et le sol (ou le grain déjà posé dessous). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sand|Ground", meta = (ClampMin = "0.0"))
+	float GroundClearance = 5.f;
+
 	/** Couches supplémentaires autorisées pour remplacer les cases bloquées [0–5]. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sand", meta = (ClampMin = "0", UIMax = "5"))
 	int32 MaxExtraLayers = 1;

@@ -177,9 +177,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs")
 	bool bEggsDieInRedPollution = true;
 
-	/** Échelle monde de l'œuf (la sphère de base fait 100 unités : 0,15 = 15 unités). */
+	/** Échelle monde de l'œuf (la sphère de base fait 100 unités : 0,8 = 80 unités ; un poisson à l'échelle 2 fait environ 460 unités). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs", meta = (ClampMin = "0.01"))
-	float EggScale = 0.15f;
+	float EggScale = 0.8f;
 
 	/** Distance [unités UE] sous le parent où l'œuf est pondu (il tombe ensuite). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eggs", meta = (ClampMin = "0"))

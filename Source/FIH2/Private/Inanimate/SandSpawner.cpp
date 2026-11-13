@@ -94,7 +94,21 @@ int32 ASandSpawner::SpawnSand()
 			-Extent.X + Spacing * (Col + 0.5f) + Stream.FRandRange(-MaxJitter, MaxJitter),
 			-Extent.Y + Spacing * (Row + 0.5f) + Stream.FRandRange(-MaxJitter, MaxJitter),
 			Layer * Spacing);
-		const FVector WorldLoc = AreaXf.TransformPosition(Local);
+		FVector WorldLoc = AreaXf.TransformPosition(Local);
+
+		// Le premier obstacle rencontré en descendant (sol, rocher ou grain déjà créé) fixe la hauteur minimale.
+		if (bLiftAboveGround && GroundTraceHalfHeight > 0.f)
+		{
+			FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(SandSpawnerGround), false, this);
+			FHitResult GroundHit;
+			const FVector Up = WorldLoc + FVector(0.f, 0.f, GroundTraceHalfHeight);
+			const FVector Down = WorldLoc - FVector(0.f, 0.f, GroundTraceHalfHeight);
+			if (World->LineTraceSingleByChannel(GroundHit, Up, Down, ECC_Visibility, GroundParams))
+			{
+				const float MinZ = GroundHit.ImpactPoint.Z + GrainDiameter * 0.5f + GroundClearance;
+				WorldLoc.Z = FMath::Max(WorldLoc.Z, MinZ);
+			}
+		}
 
 		if (BlockingObjectTypes.Num() > 0 &&
 			World->OverlapAnyTestByObjectType(WorldLoc, FQuat::Identity, BlockingTypes, GrainShape, OverlapParams))

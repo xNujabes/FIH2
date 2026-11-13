@@ -503,7 +503,21 @@ void UEcosystemSubsystem::LayEgg(AFish* Parent)
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	const FVector Location = Parent->GetActorLocation() - FVector(0.f, 0.f, Config->EggDropOffset);
+	FVector Location = Parent->GetActorLocation() - FVector(0.f, 0.f, Config->EggDropOffset);
+
+	// Un poisson qui nage près du fond pondrait sous le relief, et l'œuf traverserait la collision en triangles.
+	// On cherche le sol sous le parent et on garde l'œuf au-dessus (rayon de la sphère de base = 50 × EggScale).
+	{
+		const FVector TraceStart = Parent->GetActorLocation();
+		const FVector TraceEnd = TraceStart - FVector(0.f, 0.f, 10000.f);
+		FCollisionQueryParams Query(SCENE_QUERY_STAT(EcosystemEggGround), false, Parent);
+		FHitResult GroundHit;
+		if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Query))
+		{
+			const float MinZ = GroundHit.ImpactPoint.Z + 50.f * Config->EggScale + 10.f;
+			Location.Z = FMath::Max(Location.Z, MinZ);
+		}
+	}
 
 	AFishEgg* Egg = World->SpawnActor<AFishEgg>(EggClass, Location, FRotator::ZeroRotator, Params);
 	if (!Egg)

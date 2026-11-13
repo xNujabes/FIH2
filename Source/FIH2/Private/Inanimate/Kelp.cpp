@@ -35,8 +35,16 @@ void AKelp::BeginPlay()
 
 	// TODO: Kelp produces oxygen (integrate with ecosystem / oxygen manager)
 	AttachConstraint->BreakConstraint();
-	TryAttach();
+	// Démarrage : tracé long partant d'au-dessus, le kelp est posé directement sur le relief.
+	TryAttachWithTrace(SpawnAttachTraceUp, SpawnAttachTraceDown, false);
 	SetActorTickEnabled(!bIsAttached);
+
+	// Kelp posé au-dessus du sol : il tombe, on réessaie à intervalles réguliers jusqu'à ce qu'il se pose.
+	if (!bIsAttached && SpawnAttachRetries > 0 && ReattachRetryDelay > 0.f)
+	{
+		SpawnAttachAttemptsLeft = SpawnAttachRetries;
+		GetWorldTimerManager().SetTimer(ReattachTimerHandle, this, &AKelp::HandleReattachRetry, ReattachRetryDelay, false);
+	}
 	
 	if (bStartMature)
 	{
@@ -84,13 +92,18 @@ void AKelp::Tick(float DeltaTime)
 
 bool AKelp::TryAttach()
 {
+	return TryAttachWithTrace(AttachTraceUp, AttachTraceDown, true);
+}
+
+bool AKelp::TryAttachWithTrace(float TraceUp, float TraceDown, bool bScaleBySize)
+{
 	if (bIsAttached) return true;
 	const FTransform MeshXf = Mesh->GetComponentTransform();
 	const FVector Base = MeshXf.TransformPosition(BaseLocalOffset); // includes scale and rotation
 
-	const float SizeScale = FMath::Abs(MeshXf.GetScale3D().Z);
-	const FVector Start = Base + FVector::UpVector * AttachTraceUp * SizeScale;
-	const FVector End = Base - FVector::UpVector * AttachTraceDown * SizeScale;
+	const float SizeScale = bScaleBySize ? FMath::Abs(MeshXf.GetScale3D().Z) : 1.f;
+	const FVector Start = Base + FVector::UpVector * TraceUp * SizeScale;
+	const FVector End = Base - FVector::UpVector * TraceDown * SizeScale;
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(KelpAttach), false, this);
 	FHitResult Hit;
@@ -100,8 +113,8 @@ bool AKelp::TryAttach()
 
 	if (!bHit)
 	{
-		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: ray hit nothing (base %s, down %.0f cm)"),
-			*GetNameSafe(this), *Base.ToString(), AttachTraceDown);
+		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: ray hit nothing (base %s, up %.0f / down %.0f cm)"),
+			*GetNameSafe(this), *Base.ToString(), TraceUp * SizeScale, TraceDown * SizeScale);
 		return false;
 	}
 
@@ -120,15 +133,16 @@ bool AKelp::TryAttach()
 	{
 		bIsValidSupport = ISupportSurface::Execute_CanSupportAttachment(SupportActor, this, Hit);
 	}
-	else if (SupportActor->IsA<ALandscapeProxy>())
+	else if (SupportComponentTag != NAME_None && SupportComp->ComponentHasTag(SupportComponentTag))
 	{
+		// Composant marqué comme support (ex. le fond de la cuve), même si l'acteur ne l'est pas.
 		bIsValidSupport = true;
 	}
 
 	if (!bIsValidSupport)
 	{
-		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: %s does not implement SupportSurface and is not a Landscape"),
-		   *GetNameSafe(this), *GetNameSafe(SupportActor));
+		UE_LOG(LogKelp, Warning, TEXT("[Kelp %s] Attach FAILED: %s (%s) does not implement SupportSurface, has no '%s' component tag and is not a Landscape"),
+		   *GetNameSafe(this), *GetNameSafe(SupportActor), *GetNameSafe(SupportComp), *SupportComponentTag.ToString());
 		return false;
 	}
 	if (!Mesh->IsSimulatingPhysics())
@@ -185,7 +199,8 @@ void AKelp::Detach()
 
 void AKelp::ReportGrabStrain(float Strain, float DeltaTime)
 {
-	// Le kelp est de nouveau tenu : on annule la tentative d'attache différée.
+	// Le kelp est de nouveau tenu : on annule la tentative d'attache différée (et celles d'après l'apparition).
+	SpawnAttachAttemptsLeft = 0;
 	if (ReattachTimerHandle.IsValid())
 	{
 		GetWorldTimerManager().ClearTimer(ReattachTimerHandle);
@@ -228,9 +243,21 @@ void AKelp::NotifyReleased()
 
 void AKelp::HandleReattachRetry()
 {
-	if (!bIsAttached)
+	// Tentatives d'après l'apparition : même tracé long qu'au démarrage ; après un relâchement : tracé court.
+	const bool bAttached = bIsAttached || (SpawnAttachAttemptsLeft > 0
+		? TryAttachWithTrace(SpawnAttachTraceUp, SpawnAttachTraceDown, false)
+		: TryAttach());
+	if (bAttached)
 	{
-		TryAttach();
+		SpawnAttachAttemptsLeft = 0;
+		return;
+	}
+
+	// Encore en chute après l'apparition : nouvelle tentative plus tard.
+	if (SpawnAttachAttemptsLeft > 0 && ReattachRetryDelay > 0.f)
+	{
+		--SpawnAttachAttemptsLeft;
+		GetWorldTimerManager().SetTimer(ReattachTimerHandle, this, &AKelp::HandleReattachRetry, ReattachRetryDelay, false);
 	}
 }
 

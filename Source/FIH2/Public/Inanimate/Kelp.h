@@ -82,6 +82,20 @@ public:
 	float ReattachRetryDelay = 3.f;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kelp|Support")
 	bool bIsAttached = false;
+	/** Tag de composant qui rend une surface d'attache valide sans rendre tout l'acteur support
+	 *  (ex. le composant SM_SeabedTank de BP_Tank, mais pas ses murs). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Kelp|Support")
+	FName SupportComponentTag = TEXT("SupportSurface");
+	/** Tentatives d'attache après l'apparition, espacées de ReattachRetryDelay : un kelp posé au-dessus du sol tombe puis s'attache. 0 = aucune. */
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support", meta = (ClampMin = "0"))
+	int32 SpawnAttachRetries = 10;
+	/** Au démarrage : hauteur [cm] au-dessus de la base d'où part le tracé (rattrape un kelp placé légèrement sous le relief). */
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support", meta = (ClampMin = "0"))
+	float SpawnAttachTraceUp = 500.f;
+	/** Au démarrage : profondeur [cm] du tracé sous la base. Le kelp est posé directement sur le sol trouvé, sans tomber
+	 *  (un corps qui tombe sur une pente peut traverser une collision en triangles). */
+	UPROPERTY(EditAnywhere, Category = "Kelp|Support", meta = (ClampMin = "0"))
+	float SpawnAttachTraceDown = 5000.f;
 
 
 	UPROPERTY(BlueprintAssignable, Category = "Kelp|Events")
@@ -153,10 +167,14 @@ private:
 	FTimerHandle FruitSpawnTimerHandle;
 	FTimerHandle ReattachTimerHandle;
 	void HandleReattachRetry();
+	/** Tracé d'attache avec des distances explicites [cm, avant échelle du mesh pour TryAttach()]. bScaleBySize : multiplier par l'échelle Z du mesh. */
+	bool TryAttachWithTrace(float TraceUp, float TraceDown, bool bScaleBySize);
 	float CurrentGrowthTime = 0.0f;
 
 	float StrainTimer = 0.f;
 	TWeakObjectPtr<AActor> AttachedSupport;
+	/** Tentatives d'attache restantes depuis l'apparition (voir SpawnAttachRetries). */
+	int32 SpawnAttachAttemptsLeft = 0;
 	
 	// TODO: Kelp produces oxygen (integrate with ecosystem / oxygen manager)
 };
