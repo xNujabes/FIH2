@@ -10,6 +10,7 @@
 #include "Fish/FishEgg.h"
 #include "InputAction.h"
 #include "Materials/MaterialInterface.h"
+#include "System/FIH2ProgressionSubsystem.h"
 #include "System/GameplayEvents.h"
 #include "System/LevelConfig.h"
 #include "System/MouseController.h"
@@ -72,6 +73,7 @@ void UTutorialSubsystem::StartTutorial(UTutorialSequence* InSequence)
 		return;
 	}
 	Sequence = InSequence;
+	bWasSkipped = false;
 
 	// Avant l'étape de maintien : ni défaite, ni mort par la faim (décision du 13/11).
 	Ecosystem = UEcosystemSubsystem::Get(this);
@@ -269,6 +271,7 @@ void UTutorialSubsystem::Skip()
 	{
 		return; // pendant le maintien, « passer » finirait le tutoriel sans victoire possible (partie sans fin)
 	}
+	bWasSkipped = true; // point d'accroche de la progression : un tutoriel passé ne compte pas comme complété
 	for (int32 i = CurrentIndex + 1; i < Sequence->Steps.Num(); ++i)
 	{
 		if (Sequence->Steps[i].Condition == ETutorialCondition::Maintain)
@@ -311,6 +314,11 @@ void UTutorialSubsystem::FinishTutorial(bool bWon)
 	}
 
 	UE_LOG(LogTutorial, Log, TEXT("Tutoriel terminé (%s)."), bWon ? TEXT("victoire") : TEXT("sans victoire"));
+	// Point d'accroche de la progression (sauvegarde) : aucune logique de tutoriel ici.
+	if (UFIH2ProgressionSubsystem* Progression = UFIH2ProgressionSubsystem::Get(this))
+	{
+		Progression->NotifyTutorialFinished(this, bWon, bWasSkipped);
+	}
 	OnTutorialFinished.Broadcast(bWon);
 	Sequence = nullptr;
 }

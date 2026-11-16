@@ -56,6 +56,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tutorial")
 	int32 GetCurrentStepIndex() const { return CurrentIndex; }
 
+	/** Le joueur a utilisé « Passer le tutoriel » pendant cette séquence (lu par la progression). */
+	bool WasSkipped() const { return bWasSkipped; }
+
 	UPROPERTY(BlueprintAssignable, Category = "Tutorial")
 	FOnTutorialStepChanged OnStepChanged;
 
@@ -126,6 +129,7 @@ private:
 	int32 CurrentIndex = INDEX_NONE;
 	double StepEnterTime = 0.0;
 	bool bStepCompleting = false;
+	bool bWasSkipped = false;
 
 	FTimerHandle StepTimer;     // Delay
 	FTimerHandle TimeoutTimer;  // Timeout anti-blocage

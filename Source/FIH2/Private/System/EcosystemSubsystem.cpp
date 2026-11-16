@@ -11,6 +11,7 @@
 #include "Inanimate/Kelp.h"
 #include "PhysicsEngine/PhysicsHandleComponent.h"
 #include "Stats/Stats.h"
+#include "System/FIH2ProgressionSubsystem.h"
 #include "System/GameplayEvents.h"
 #include "System/LevelConfig.h"
 
@@ -59,6 +60,16 @@ TStatId UEcosystemSubsystem::GetStatId() const
 
 void UEcosystemSubsystem::EnsureConfig()
 {
+	if (Config)
+	{
+		return;
+	}
+
+	// Config du niveau d'après le catalogue (carte courante), si une entrée en fournit une.
+	if (const UFIH2ProgressionSubsystem* Progression = UFIH2ProgressionSubsystem::Get(this))
+	{
+		Config = Progression->FindLevelConfigForWorld(GetWorld());
+	}
 	if (Config)
 	{
 		return;
