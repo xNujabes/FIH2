@@ -31,6 +31,13 @@ void AFish::BeginPlay()
 
 	// Guarantee it whatever a Blueprint default says: steering is the only mover.
 	SetHeldByPlayer(false);
+
+	// Nage : le matériau du poisson (M_Fish) ondule par World Position Offset. Chaque poisson reçoit une phase
+	// aléatoire (Custom Primitive Data 0, paramètre SwimPhase) pour que le banc ne batte pas de la queue à l'unisson.
+	if (Mesh)
+	{
+		Mesh->SetCustomPrimitiveDataFloat(0, FMath::FRandRange(0.f, 2.f * PI));
+	}
 }
 
 void AFish::PossessedBy(AController* NewController)
